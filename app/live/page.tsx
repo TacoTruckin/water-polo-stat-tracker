@@ -98,6 +98,7 @@ function LivePageContent() {
     gameId: string | null;
     roleScope: SessionScope | null;
     status: 'not_started' | 'running' | 'paused' | 'ended' | null;
+    scheduledAt: string | null;
   } | null>(null);
   const [turnoverPickerOpen, setTurnoverPickerOpen] = useState(false);
   const [shotModalOpen, setShotModalOpen] = useState(false);
@@ -137,7 +138,19 @@ function LivePageContent() {
   const canShots = canOffense;
   const hasScope = state.sessionId ? effectiveScope !== null : false;
   const isEnded = sessionInfo?.status === 'ended';
-  const actionsDisabled = !state.selectedPlayer || !hasScope || isEnded;
+  const canTrackToday = useCallback((scheduledAt: string | null) => {
+    if (!scheduledAt) return true;
+    const gameDate = new Date(scheduledAt);
+    if (Number.isNaN(gameDate.getTime())) return true;
+    const gameDay = new Date(gameDate);
+    gameDay.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return gameDay <= today;
+  }, []);
+  const trackingLockedByDate =
+    profile?.role === 'tracker' && !canTrackToday(sessionInfo?.scheduledAt ?? null);
+  const actionsDisabled = !state.selectedPlayer || !hasScope || isEnded || trackingLockedByDate;
   const lastOwnedEvent = useMemo(() => {
     if (!state.sessionId || !user) return null;
     for (let i = state.events.length - 1; i >= 0; i -= 1) {
@@ -146,7 +159,10 @@ function LivePageContent() {
     }
     return null;
   }, [state.events, state.sessionId, user]);
-  const canUndo = !isEnded && (state.sessionId ? Boolean(lastOwnedEvent) : state.events.length > 0);
+  const canUndo =
+    !isEnded &&
+    !trackingLockedByDate &&
+    (state.sessionId ? Boolean(lastOwnedEvent) : state.events.length > 0);
 
   const getCurrentClockMs = useCallback(
     (atMs: number) => {
@@ -205,7 +221,7 @@ function LivePageContent() {
       },
       eventScope: SessionScope
     ) => {
-      if (isEnded) return null;
+      if (isEnded || trackingLockedByDate) return null;
       const wallClockMs = Date.now();
       const gameClockMs = getCurrentClockMs(wallClockMs);
       const event = {
@@ -237,6 +253,7 @@ function LivePageContent() {
       dispatch,
       getCurrentClockMs,
       isEnded,
+      trackingLockedByDate,
       logEventToDb,
       periodLabel,
       sessionInfo?.gameId,
@@ -405,6 +422,7 @@ function LivePageContent() {
       }
       const gameRecord = Array.isArray(data.games) ? data.games[0] : data.games;
       const opponent = gameRecord?.opponent_name ?? '';
+      const scheduledAt = gameRecord?.scheduled_at ?? null;
       const startedAt = data.started_at ?? data.created_at ?? null;
       const gameId = data.game_id ?? null;
       const roleScope = (data.role_scope as SessionScope) ?? null;
@@ -413,7 +431,8 @@ function LivePageContent() {
         startedAt,
         gameId,
         roleScope,
-        status: (data.status as 'not_started' | 'running' | 'paused' | 'ended' | null) ?? null
+        status: (data.status as 'not_started' | 'running' | 'paused' | 'ended' | null) ?? null,
+        scheduledAt
       });
       const nextCreatedAt = startedAt ? Date.parse(startedAt) : Date.now();
       dispatch({
@@ -524,6 +543,12 @@ function LivePageContent() {
     : state.createdAt
       ? new Date(state.createdAt).toLocaleString()
       : '';
+  const scheduledLabel = sessionInfo?.scheduledAt
+    ? new Date(sessionInfo.scheduledAt).toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric'
+      })
+    : '';
   const lastEvent = state.events[state.events.length - 1];
   const lastEventLabel = lastEvent
     ? `${lastEvent.displayTime} • ${lastEvent.eventType} • ${lastEvent.context} #${lastEvent.playerNumber}`
@@ -586,6 +611,11 @@ function LivePageContent() {
             </button>
           </div>
         </div>
+        {trackingLockedByDate ? (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700">
+            Tracking opens on game day{scheduledLabel ? ` (${scheduledLabel})` : ''}.
+          </div>
+        ) : null}
         {isEnded ? (
           <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
             Game closed. Tracking is locked.

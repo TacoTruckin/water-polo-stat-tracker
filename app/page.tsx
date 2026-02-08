@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useGame } from '@/lib/store';
-import type { SessionScope } from '@/lib/types';
 import { supabase } from '@/lib/supabaseClient';
 import { useProfile } from '@/lib/useProfile';
 import { useRequireAuth } from '@/lib/useRequireAuth';
@@ -19,17 +18,11 @@ type Game = {
 type Session = {
   id: string;
   game_id: string;
-  role_scope: SessionScope;
+  role_scope: string;
   started_at: string | null;
   created_at: string;
   created_by: string;
 };
-
-const scopeOptions: { value: SessionScope; label: string }[] = [
-  { value: 'OFFENSE', label: 'Offense' },
-  { value: 'DEFENSE', label: 'Defense' },
-  { value: 'BOTH', label: 'Both' }
-];
 
 export default function HomePage() {
   const router = useRouter();
@@ -39,7 +32,6 @@ export default function HomePage() {
 
   const [games, setGames] = useState<Game[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [scopeByGame, setScopeByGame] = useState<Record<string, SessionScope>>({});
   const [gamesLoading, setGamesLoading] = useState(false);
   const [gamesError, setGamesError] = useState<string | null>(null);
   const [startingGameId, setStartingGameId] = useState<string | null>(null);
@@ -100,19 +92,26 @@ export default function HomePage() {
     };
   }, []);
 
-  const handleScopeChange = (gameId: string, scope: SessionScope) => {
-    setScopeByGame((prev) => ({ ...prev, [gameId]: scope }));
-  };
+  const canTrackToday = useCallback((scheduledAt: string) => {
+    const gameDate = new Date(scheduledAt);
+    if (Number.isNaN(gameDate.getTime())) return true;
+    const gameDay = new Date(gameDate);
+    gameDay.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return gameDay <= today;
+  }, []);
 
   const handleStartTracking = async (game: Game) => {
     if (!supabase || !user) return;
-    const scope = scopeByGame[game.id] ?? 'OFFENSE';
+    if (profile?.role !== 'super_admin' && !canTrackToday(game.scheduled_at)) {
+      setGamesError('Tracking opens on the scheduled game day.');
+      return;
+    }
     setStartingGameId(game.id);
     setGamesError(null);
 
-    const existing = sessions.find(
-      (session) => session.game_id === game.id && session.role_scope === scope
-    );
+    const existing = sessions.find((session) => session.game_id === game.id);
 
     let sessionId = existing?.id ?? null;
     let startedAt = existing?.started_at ?? existing?.created_at ?? null;
@@ -122,7 +121,7 @@ export default function HomePage() {
         .from('sessions')
         .insert({
           game_id: game.id,
-          role_scope: scope,
+          role_scope: 'BOTH',
           started_at: new Date().toISOString(),
           created_by: user.id
         })
@@ -227,10 +226,9 @@ export default function HomePage() {
       ) : (
         <div className="grid gap-3">
           {games.map((game) => {
-            const selectedScope = scopeByGame[game.id] ?? 'OFFENSE';
-            const existingSession = sessions.find(
-              (session) => session.game_id === game.id && session.role_scope === selectedScope
-            );
+            const existingSession = sessions.find((session) => session.game_id === game.id);
+            const trackingLocked =
+              profile?.role !== 'super_admin' && !canTrackToday(game.scheduled_at);
             return (
               <div
                 key={game.id}
@@ -244,28 +242,14 @@ export default function HomePage() {
                   {game.location ? (
                     <div className="text-xs text-slate-500">{game.location}</div>
                   ) : null}
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    {scopeOptions.map((option) => {
-                      const active = option.value === selectedScope;
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          className={`min-h-[36px] rounded-full border px-3 text-xs font-semibold ${
-                            active
-                              ? 'border-slate-900 bg-slate-900 text-white'
-                              : 'border-slate-200 bg-white text-slate-700'
-                          }`}
-                          onClick={() => handleScopeChange(game.id, option.value)}
-                        >
-                          {option.label}
-                        </button>
-                      );
-                    })}
-                  </div>
                   {existingSession ? (
                     <div className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                      Session ready ({existingSession.role_scope})
+                      Session ready
+                    </div>
+                  ) : null}
+                  {trackingLocked ? (
+                    <div className="mt-2 text-xs font-semibold text-amber-600">
+                      Tracking opens on game day.
                     </div>
                   ) : null}
                 </div>
@@ -273,7 +257,7 @@ export default function HomePage() {
                   type="button"
                   className="min-h-[56px] rounded-xl bg-slate-900 px-4 text-base font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                   onClick={() => handleStartTracking(game)}
-                  disabled={startingGameId === game.id}
+                  disabled={startingGameId === game.id || trackingLocked}
                 >
                   {existingSession ? 'Resume' : 'Start Live'}
                 </button>
