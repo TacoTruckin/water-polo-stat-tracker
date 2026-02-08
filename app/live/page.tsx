@@ -97,6 +97,7 @@ function LivePageContent() {
     startedAt: string | null;
     gameId: string | null;
     roleScope: SessionScope | null;
+    status: 'not_started' | 'running' | 'paused' | 'ended' | null;
   } | null>(null);
   const [turnoverPickerOpen, setTurnoverPickerOpen] = useState(false);
   const [shotModalOpen, setShotModalOpen] = useState(false);
@@ -135,7 +136,8 @@ function LivePageContent() {
   const canDefense = effectiveScope === 'DEFENSE' || effectiveScope === 'BOTH';
   const canShots = canOffense;
   const hasScope = state.sessionId ? effectiveScope !== null : false;
-  const actionsDisabled = !state.selectedPlayer || !hasScope;
+  const isEnded = sessionInfo?.status === 'ended';
+  const actionsDisabled = !state.selectedPlayer || !hasScope || isEnded;
   const lastOwnedEvent = useMemo(() => {
     if (!state.sessionId || !user) return null;
     for (let i = state.events.length - 1; i >= 0; i -= 1) {
@@ -144,7 +146,7 @@ function LivePageContent() {
     }
     return null;
   }, [state.events, state.sessionId, user]);
-  const canUndo = state.sessionId ? Boolean(lastOwnedEvent) : state.events.length > 0;
+  const canUndo = !isEnded && (state.sessionId ? Boolean(lastOwnedEvent) : state.events.length > 0);
 
   const getCurrentClockMs = useCallback(
     (atMs: number) => {
@@ -203,6 +205,7 @@ function LivePageContent() {
       },
       eventScope: SessionScope
     ) => {
+      if (isEnded) return null;
       const wallClockMs = Date.now();
       const gameClockMs = getCurrentClockMs(wallClockMs);
       const event = {
@@ -233,6 +236,7 @@ function LivePageContent() {
     [
       dispatch,
       getCurrentClockMs,
+      isEnded,
       logEventToDb,
       periodLabel,
       sessionInfo?.gameId,
@@ -323,6 +327,21 @@ function LivePageContent() {
     setUndoUsed(true);
   };
 
+  const handleEndGame = async () => {
+    if (!state.sessionId || !supabase || !user) return;
+    if (profile?.role !== 'super_admin') return;
+    if (isEnded) return;
+    const confirmed = window.confirm('End this game? Tracking will be locked.');
+    if (!confirmed) return;
+    const { error } = await supabase
+      .from('sessions')
+      .update({ status: 'ended', ended_at: new Date().toISOString() })
+      .eq('id', state.sessionId);
+    if (!error) {
+      setSessionInfo((prev) => (prev ? { ...prev, status: 'ended' } : prev));
+    }
+  };
+
   useEffect(() => {
     eventsRef.current = state.events;
   }, [state.events]);
@@ -376,7 +395,7 @@ function LivePageContent() {
     const loadSession = async () => {
       const { data } = await supabaseClient
         .from('sessions')
-        .select('id, game_id, role_scope, started_at, created_at, games(opponent_name, scheduled_at)')
+        .select('id, game_id, role_scope, status, started_at, created_at, games(opponent_name, scheduled_at)')
         .eq('id', state.sessionId)
         .maybeSingle();
       if (!active) return;
@@ -389,7 +408,13 @@ function LivePageContent() {
       const startedAt = data.started_at ?? data.created_at ?? null;
       const gameId = data.game_id ?? null;
       const roleScope = (data.role_scope as SessionScope) ?? null;
-      setSessionInfo({ opponent, startedAt, gameId, roleScope });
+      setSessionInfo({
+        opponent,
+        startedAt,
+        gameId,
+        roleScope,
+        status: (data.status as 'not_started' | 'running' | 'paused' | 'ended' | null) ?? null
+      });
       const nextCreatedAt = startedAt ? Date.parse(startedAt) : Date.now();
       dispatch({
         type: 'SET_GAME_META',
@@ -540,15 +565,32 @@ function LivePageContent() {
               <div className="text-xs text-slate-500">Session started {sessionTimeLabel}</div>
             ) : null}
           </div>
-          <button
-            type="button"
-            className="min-h-[44px] rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-            onClick={handleUndo}
-            disabled={undoDisabled}
-          >
-            Undo
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {profile?.role === 'super_admin' ? (
+              <button
+                type="button"
+                className="min-h-[44px] rounded-lg border border-rose-300 bg-rose-50 px-3 text-sm font-semibold text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={handleEndGame}
+                disabled={isEnded}
+              >
+                End Game
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="min-h-[44px] rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={handleUndo}
+              disabled={undoDisabled}
+            >
+              Undo
+            </button>
+          </div>
         </div>
+        {isEnded ? (
+          <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
+            Game closed. Tracking is locked.
+          </div>
+        ) : null}
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
           <span className="font-semibold text-slate-600">Last event: {lastEventLabel}</span>
           {needsPlayer ? (
