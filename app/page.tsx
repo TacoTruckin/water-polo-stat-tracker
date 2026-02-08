@@ -28,7 +28,7 @@ type Session = {
 const scopeOptions: { value: SessionScope; label: string }[] = [
   { value: 'OFFENSE', label: 'Offense' },
   { value: 'DEFENSE', label: 'Defense' },
-  { value: 'BOTH', label: 'Both' },
+  { value: 'BOTH', label: 'Both' }
 ];
 
 export default function HomePage() {
@@ -59,7 +59,7 @@ export default function HomePage() {
         .from('sessions')
         .select('id, game_id, role_scope, started_at, created_at, created_by')
         .eq('created_by', user.id)
-        .order('created_at', { ascending: true }),
+        .order('created_at', { ascending: true })
     ]);
 
     if (gamesRes.error) {
@@ -95,7 +95,7 @@ export default function HomePage() {
         month: 'short',
         day: 'numeric',
         hour: 'numeric',
-        minute: '2-digit',
+        minute: '2-digit'
       });
     };
   }, []);
@@ -124,7 +124,7 @@ export default function HomePage() {
           game_id: game.id,
           role_scope: scope,
           started_at: new Date().toISOString(),
-          created_by: user.id,
+          created_by: user.id
         })
         .select('id, started_at, created_at')
         .single();
@@ -142,7 +142,7 @@ export default function HomePage() {
       type: 'SET_GAME_META',
       opponent: game.opponent_name,
       createdAt: createdAtMs,
-      gameId: game.id,
+      gameId: game.id
     });
     dispatch({ type: 'SET_SESSION', sessionId });
     router.push(`/live?sessionId=${sessionId}`);

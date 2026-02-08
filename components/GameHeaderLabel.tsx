@@ -15,11 +15,11 @@ export function GameHeaderLabel() {
     const datePart = date.toLocaleDateString(undefined, {
       month: 'short',
       day: 'numeric',
-      year: 'numeric',
+      year: 'numeric'
     });
     const timePart = date.toLocaleTimeString(undefined, {
       hour: 'numeric',
-      minute: '2-digit',
+      minute: '2-digit'
     });
     return `vs ${opponent} — ${datePart} ${timePart}`;
   }, [state.createdAt, state.opponent]);

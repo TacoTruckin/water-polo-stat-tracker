@@ -41,13 +41,12 @@ export function useProfile(user: User | null) {
       return;
     }
 
-    const mapped: Profile = {
+    setProfile({
       userId: data.id,
       name: data.name ?? null,
       email: data.email ?? null,
       role: data.role
-    };
-    setProfile(mapped);
+    });
     setLoading(false);
   }, [user]);
 

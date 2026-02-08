@@ -46,7 +46,7 @@ export default function AdminUsersPage() {
   useEffect(() => {
     if (!canUseSupabase) return;
     if (!authLoading && !profileLoading && !user) {
-      router.push('/');
+      router.push('/login');
       return;
     }
     if (!authLoading && !profileLoading && profile && profile.role !== 'super_admin') {
@@ -60,7 +60,10 @@ export default function AdminUsersPage() {
     void loadUsers();
   }, [canUseSupabase, loadUsers, profile]);
 
-  const adminCount = useMemo(() => users.filter((item) => item.role === 'super_admin').length, [users]);
+  const adminCount = useMemo(
+    () => users.filter((item) => item.role === 'super_admin').length,
+    [users]
+  );
 
   const handleRoleChange = async (target: UserProfile, role: 'super_admin' | 'tracker') => {
     if (!supabase) return;
@@ -83,7 +86,7 @@ export default function AdminUsersPage() {
     return (
       <div className="flex w-full flex-1 flex-col gap-4">
         <h1 className="text-2xl font-semibold text-slate-900">Admin</h1>
-        <p className="text-slate-600">Admin tools are unavailable in local-only mode.</p>
+        <p className="text-slate-600">Supabase is not configured for this deployment.</p>
       </div>
     );
   }

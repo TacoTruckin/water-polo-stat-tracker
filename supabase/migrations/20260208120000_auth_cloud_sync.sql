@@ -1,4 +1,4 @@
--- New auth + games/sessions/events model for Netlify runtime
+-- Auth + games/sessions/events model
 
 create extension if not exists "pgcrypto";
 
@@ -39,13 +39,11 @@ begin
 end;
 $$;
 
--- Ensure a profile row exists for every auth user.
 drop trigger if exists on_auth_user_created_profile on auth.users;
 create trigger on_auth_user_created_profile
   after insert on auth.users
   for each row execute function public.handle_new_user_profile();
 
--- Profiles policies
 create policy "User profiles read own or admin"
   on public.user_profiles for select
   using (id = auth.uid() or public.is_super_admin());

@@ -1,7 +1,7 @@
 'use client';
 
 import type { Dispatch, ReactNode } from 'react';
-import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
+import { createContext, useContext, useEffect, useMemo, useReducer } from 'react';
 import type { Context, GameClock, GameEvent, Quarter, Team } from './types';
 
 export type Settings = {
@@ -27,9 +27,7 @@ export type GameState = {
   clock: GameClock;
   opponent: string;
   createdAt: number;
-  gameDate: string;
   sessionId: string | null;
-  upcomingGameId: string | null;
 };
 
 export type GameAction =
@@ -39,9 +37,7 @@ export type GameAction =
   | { type: 'SET_CONTEXT'; context: Context }
   | { type: 'SET_OPPONENT'; opponent: string }
   | { type: 'SET_GAME_META'; opponent: string; createdAt: number; gameId?: string }
-  | { type: 'START_GAME'; opponent: string; now: number }
-  | { type: 'SET_GAME_DATE'; gameDate: string }
-  | { type: 'SET_SESSION'; sessionId: string | null; upcomingGameId?: string | null }
+  | { type: 'SET_SESSION'; sessionId: string | null }
   | { type: 'SET_EVENTS'; events: GameEvent[] }
   | { type: 'ADD_EVENT'; event: GameEvent }
   | { type: 'UNDO' }
@@ -90,9 +86,7 @@ export function createInitialState(): GameState {
     clock: { ...defaultClock },
     opponent: '',
     createdAt: 0,
-    gameDate: '',
-    sessionId: null,
-    upcomingGameId: null
+    sessionId: null
   };
 }
 
@@ -111,7 +105,6 @@ function withUndo(state: GameState, events: GameEvent[]): GameState {
 function mergeStateWithDefaults(raw: Partial<GameState> | null): GameState {
   const base = createInitialState();
   if (!raw || typeof raw !== 'object') return base;
-  const legacyOpponent = (raw as { opponentName?: string }).opponentName;
   return {
     ...base,
     ...raw,
@@ -121,11 +114,9 @@ function mergeStateWithDefaults(raw: Partial<GameState> | null): GameState {
     events: Array.isArray(raw.events) ? raw.events : base.events,
     undoStack: Array.isArray(raw.undoStack) ? raw.undoStack : base.undoStack,
     gameId: raw.gameId ?? base.gameId,
-    opponent: raw.opponent ?? legacyOpponent ?? base.opponent,
+    opponent: raw.opponent ?? base.opponent,
     createdAt: raw.createdAt ?? base.createdAt,
-    gameDate: raw.gameDate ?? base.gameDate,
-    sessionId: raw.sessionId ?? base.sessionId,
-    upcomingGameId: raw.upcomingGameId ?? base.upcomingGameId
+    sessionId: raw.sessionId ?? base.sessionId
   };
 }
 
@@ -148,24 +139,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         createdAt: action.createdAt,
         gameId: action.gameId ?? state.gameId
       };
-    case 'START_GAME': {
-      if (state.createdAt > 0) {
-        return { ...state, opponent: action.opponent };
-      }
-      return {
-        ...state,
-        opponent: action.opponent,
-        createdAt: action.now,
-        gameId: createGameId()
-      };
-    }
-    case 'SET_GAME_DATE':
-      return { ...state, gameDate: action.gameDate };
     case 'SET_SESSION':
       return {
         ...state,
-        sessionId: action.sessionId,
-        upcomingGameId: action.upcomingGameId ?? state.upcomingGameId
+        sessionId: action.sessionId
       };
     case 'SET_EVENTS':
       return {
@@ -248,35 +225,30 @@ type GameContextValue = {
   dispatch: Dispatch<GameAction>;
 };
 
-const GameContext = createContext<GameContextValue | null>(null);
+const GameContext = createContext<GameContextValue | undefined>(undefined);
 
-type GameProviderProps = {
-  children: ReactNode;
-};
-
-export function GameProvider({ children }: GameProviderProps) {
+export function GameProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(gameReducer, undefined, createInitialState);
-  const hasLoaded = useRef(false);
 
   useEffect(() => {
-    const stored = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as Partial<GameState>;
-        dispatch({ type: 'LOAD_GAME', state: mergeStateWithDefaults(parsed) });
-      } catch {
-        // Ignore malformed storage and keep defaults.
-      }
+    if (typeof window === 'undefined') return;
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as Partial<GameState>;
+      dispatch({ type: 'LOAD_GAME', state: parsed as GameState });
+    } catch {
+      // Ignore bad storage
     }
-    hasLoaded.current = true;
   }, []);
 
   useEffect(() => {
-    if (!hasLoaded.current) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }, [state]);
 
   const value = useMemo(() => ({ state, dispatch }), [state]);
+
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;
 }
 

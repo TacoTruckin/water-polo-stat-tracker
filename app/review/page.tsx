@@ -119,7 +119,7 @@ function ReviewPageContent() {
         dispatch({
           type: 'SET_GAME_META',
           opponent,
-          createdAt: startedAt ? Date.parse(startedAt) : Date.now(),
+          createdAt: startedAt ? Date.parse(startedAt) : Date.now()
         });
       }
     };
@@ -185,7 +185,7 @@ function ReviewPageContent() {
       month: 'short',
       day: 'numeric',
       hour: 'numeric',
-      minute: '2-digit',
+      minute: '2-digit'
     });
   }, [sessionInfo?.startedAt]);
 
@@ -200,9 +200,7 @@ function ReviewPageContent() {
 
   if (authLoading || profileLoading) {
     return (
-      <div className="flex w-full flex-1 items-center justify-center text-slate-500">
-        Loading…
-      </div>
+      <div className="flex w-full flex-1 items-center justify-center text-slate-500">Loading…</div>
     );
   }
 
@@ -269,7 +267,9 @@ function ReviewPageContent() {
           <div className="divide-y divide-slate-200">
             {events.map((event) => {
               const periodLabel = event.quarter === 5 ? 'OT' : `Q${event.quarter}`;
-              const timeLabel = event.clock_ms ? `${periodLabel} ${formatClock(event.clock_ms)}` : periodLabel;
+              const timeLabel = event.clock_ms
+                ? `${periodLabel} ${formatClock(event.clock_ms)}`
+                : periodLabel;
               const shotLabel = event.payload?.shot
                 ? ` (${event.payload.shot.zone} ${event.payload.shot.outcome})`
                 : '';
@@ -279,7 +279,10 @@ function ReviewPageContent() {
                   className="grid grid-cols-[140px_1fr_120px_120px] items-center gap-2 px-4 py-3 text-sm text-slate-700"
                 >
                   <div className="font-semibold text-slate-900">{timeLabel}</div>
-                  <div>{event.event_type}{shotLabel}</div>
+                  <div>
+                    {event.event_type}
+                    {shotLabel}
+                  </div>
                   <div>{event.team}</div>
                   <div>#{event.player_id}</div>
                 </div>

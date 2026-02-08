@@ -69,7 +69,7 @@ export default function AdminOverviewPage() {
           .from('sessions')
           .select('id, game_id, role_scope, started_at, created_at, created_by')
           .order('created_at', { ascending: false }),
-        supabaseClient.from('events').select('id, game_id'),
+        supabaseClient.from('events').select('id, game_id')
       ]);
 
       if (gamesRes.error) {
@@ -116,7 +116,7 @@ export default function AdminOverviewPage() {
     return (
       <div className="flex w-full flex-1 flex-col gap-4">
         <h1 className="text-2xl font-semibold text-slate-900">Admin Overview</h1>
-        <p className="text-slate-600">Admin tools are unavailable in local-only mode.</p>
+        <p className="text-slate-600">Supabase is not configured for this deployment.</p>
       </div>
     );
   }
@@ -149,21 +149,16 @@ export default function AdminOverviewPage() {
 
       <div className="grid gap-3">
         {games.map((game) => (
-          <div
-            key={game.id}
-            className="rounded-2xl border border-slate-200 bg-white p-4"
-          >
+          <div key={game.id} className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <div className="text-base font-semibold text-slate-900">
-                  vs {game.opponent_name}
-                </div>
+                <div className="text-base font-semibold text-slate-900">vs {game.opponent_name}</div>
                 <div className="text-sm text-slate-600">
                   {new Date(game.scheduled_at).toLocaleString(undefined, {
                     month: 'short',
                     day: 'numeric',
                     hour: 'numeric',
-                    minute: '2-digit',
+                    minute: '2-digit'
                   })}
                 </div>
                 {game.location ? (

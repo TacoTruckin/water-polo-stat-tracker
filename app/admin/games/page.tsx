@@ -23,7 +23,7 @@ type GameDraft = {
 const emptyDraft: GameDraft = {
   opponent: '',
   scheduledAt: '',
-  location: '',
+  location: ''
 };
 
 function toDatetimeLocal(value: string | null) {
@@ -93,7 +93,7 @@ export default function AdminGamesPage() {
       opponent_name: draft.opponent.trim(),
       scheduled_at: new Date(draft.scheduledAt).toISOString(),
       location: draft.location.trim() || null,
-      created_by: user.id,
+      created_by: user.id
     };
     const { error } = await supabase.from('games').insert(payload);
     if (error) {
@@ -109,7 +109,7 @@ export default function AdminGamesPage() {
     setEditDraft({
       opponent: game.opponent_name,
       scheduledAt: toDatetimeLocal(game.scheduled_at),
-      location: game.location ?? '',
+      location: game.location ?? ''
     });
   };
 
@@ -119,7 +119,7 @@ export default function AdminGamesPage() {
     const payload = {
       opponent_name: editDraft.opponent.trim(),
       scheduled_at: new Date(editDraft.scheduledAt).toISOString(),
-      location: editDraft.location.trim() || null,
+      location: editDraft.location.trim() || null
     };
     const { error } = await supabase.from('games').update(payload).eq('id', editingId);
     if (error) {
@@ -149,7 +149,7 @@ export default function AdminGamesPage() {
         month: 'short',
         day: 'numeric',
         hour: 'numeric',
-        minute: '2-digit',
+        minute: '2-digit'
       });
     };
   }, []);
@@ -158,7 +158,7 @@ export default function AdminGamesPage() {
     return (
       <div className="flex w-full flex-1 flex-col gap-4">
         <h1 className="text-2xl font-semibold text-slate-900">Admin</h1>
-        <p className="text-slate-600">Admin tools are unavailable in local-only mode.</p>
+        <p className="text-slate-600">Supabase is not configured for this deployment.</p>
       </div>
     );
   }
@@ -209,7 +209,9 @@ export default function AdminGamesPage() {
               className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
               type="datetime-local"
               value={draft.scheduledAt}
-              onChange={(event) => setDraft((prev) => ({ ...prev, scheduledAt: event.target.value }))}
+              onChange={(event) =>
+                setDraft((prev) => ({ ...prev, scheduledAt: event.target.value }))
+              }
             />
           </label>
           <label className="text-sm font-semibold text-slate-700">
@@ -241,10 +243,7 @@ export default function AdminGamesPage() {
       ) : (
         <div className="grid gap-3">
           {games.map((game) => (
-            <div
-              key={game.id}
-              className="rounded-2xl border border-slate-200 bg-white p-4"
-            >
+            <div key={game.id} className="rounded-2xl border border-slate-200 bg-white p-4">
               {editingId === game.id ? (
                 <div className="grid gap-3 md:grid-cols-3">
                   <label className="text-sm font-semibold text-slate-700">
