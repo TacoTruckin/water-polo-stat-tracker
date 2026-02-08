@@ -26,11 +26,6 @@ const contextOptions: { value: Context; label: string }[] = [
   { value: 'FIVE_M', label: '5M' }
 ];
 
-const teamOptions: { value: Team; label: string }[] = [
-  { value: 'US', label: 'US' },
-  { value: 'THEM', label: 'Them' }
-];
-
 const shotOutcomeToEvent: Record<ShotOutcome, EventType> = {
   [ShotOutcome.GOAL]: EventType.SHOT_GOAL,
   [ShotOutcome.SAVED]: EventType.SHOT_SAVED,
@@ -110,15 +105,12 @@ function LivePageContent() {
   const [lastShotZone, setLastShotZone] = useState<ShotZone | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimerRef = useRef<number | null>(null);
+  const contextTimerRef = useRef<number | null>(null);
   const eventsRef = useRef(state.events);
 
   const sessionIdParam = searchParams.get('sessionId');
 
-  const playerOptions = (() => {
-    if (state.selectedTeam === 'US') return state.roster.us;
-    if (state.roster.them && state.roster.them.length > 0) return state.roster.them;
-    return Array.from({ length: 16 }, (_, index) => `O${index + 1}`);
-  })();
+  const playerOptions = state.roster.us;
   const playerNames = state.roster.names ?? {};
 
   const createEventId = () => {
@@ -220,6 +212,9 @@ function LivePageContent() {
       dispatch({ type: 'ADD_EVENT', event });
       void logEventToDb(event);
       showToast('Saved!');
+      if (state.context === 'MAN_UP' || state.context === 'MAN_DOWN') {
+        dispatch({ type: 'SET_CONTEXT', context: 'EVEN' });
+      }
       return event;
     },
     [
@@ -230,24 +225,11 @@ function LivePageContent() {
       sessionInfo?.gameId,
       showToast,
       state.gameId,
+      state.context,
       state.quarter,
       user?.id
     ]
   );
-
-  const handleGoal = () => {
-    if (!state.selectedPlayer || !canOffense) return;
-    logEvent(
-      {
-        eventType: EventType.SHOT_GOAL,
-        playerNumber: state.selectedPlayer,
-        team: state.selectedTeam,
-        quarter: state.quarter,
-        context: state.context
-      },
-      'OFFENSE'
-    );
-  };
 
   const handleAssist = () => {
     if (!state.selectedPlayer || !canOffense) return;
@@ -255,7 +237,7 @@ function LivePageContent() {
       {
         eventType: EventType.ASSIST,
         playerNumber: state.selectedPlayer,
-        team: state.selectedTeam,
+        team: 'US',
         quarter: state.quarter,
         context: state.context
       },
@@ -269,7 +251,7 @@ function LivePageContent() {
       {
         eventType,
         playerNumber: state.selectedPlayer,
-        team: state.selectedTeam,
+        team: 'US',
         quarter: state.quarter,
         context: state.context
       },
@@ -284,7 +266,7 @@ function LivePageContent() {
       {
         eventType,
         playerNumber: state.selectedPlayer,
-        team: state.selectedTeam,
+        team: 'US',
         quarter: state.quarter,
         context: state.context
       },
@@ -299,13 +281,16 @@ function LivePageContent() {
       {
         eventType: shotOutcomeToEvent[outcome],
         playerNumber: state.selectedPlayer,
-        team: state.selectedTeam,
+        team: 'US',
         quarter: state.quarter,
         context: state.context,
         shot: { zone, outcome, situation: state.context }
       },
       'OFFENSE'
     );
+    if (state.context === 'FIVE_M') {
+      dispatch({ type: 'SET_CONTEXT', context: 'EVEN' });
+    }
     setShotModalOpen(false);
   };
 
@@ -341,6 +326,30 @@ function LivePageContent() {
       dispatch({ type: 'SET_SESSION', sessionId: sessionIdParam });
     }
   }, [dispatch, sessionIdParam, state.sessionId]);
+
+  useEffect(() => {
+    if (state.selectedTeam !== 'US') {
+      dispatch({ type: 'SET_TEAM', team: 'US' });
+    }
+  }, [dispatch, state.selectedTeam]);
+
+  useEffect(() => {
+    if (contextTimerRef.current) {
+      window.clearTimeout(contextTimerRef.current);
+      contextTimerRef.current = null;
+    }
+    if (state.context === 'MAN_UP' || state.context === 'MAN_DOWN') {
+      contextTimerRef.current = window.setTimeout(() => {
+        dispatch({ type: 'SET_CONTEXT', context: 'EVEN' });
+      }, 30000);
+    }
+    return () => {
+      if (contextTimerRef.current) {
+        window.clearTimeout(contextTimerRef.current);
+        contextTimerRef.current = null;
+      }
+    };
+  }, [dispatch, state.context]);
 
   useEffect(() => {
     const supabaseClient = supabase;
@@ -480,14 +489,19 @@ function LivePageContent() {
     : state.createdAt
       ? new Date(state.createdAt).toLocaleString()
       : '';
-  const sessionDisplay = sessionTimeLabel
-    ? `vs ${opponentLabel} — ${sessionTimeLabel}`
-    : `vs ${opponentLabel}`;
+  const matchupLabel = `CBAD vs ${opponentLabel}`;
   const lastEvent = state.events[state.events.length - 1];
   const lastEventLabel = lastEvent
     ? `${lastEvent.displayTime} • ${lastEvent.eventType} • ${lastEvent.context} #${lastEvent.playerNumber}`
     : 'No events yet';
   const needsPlayer = !state.selectedPlayer;
+  const checkerboardStyle = {
+    backgroundColor: '#0f172a',
+    backgroundImage:
+      'linear-gradient(45deg, rgba(255,255,255,0.05) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.05) 75%, rgba(255,255,255,0.05)), linear-gradient(45deg, rgba(255,255,255,0.05) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.05) 75%, rgba(255,255,255,0.05))',
+    backgroundPosition: '0 0, 20px 20px',
+    backgroundSize: '40px 40px'
+  } as const;
 
   if (authLoading) {
     return (
@@ -512,12 +526,20 @@ function LivePageContent() {
   }
 
   return (
-    <div className="flex w-full flex-1 flex-col gap-5 pb-10">
+    <div
+      className="flex w-full flex-1 flex-col gap-5 pb-10"
+      style={checkerboardStyle}
+    >
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Live</div>
-            <div className="text-base font-semibold text-slate-900">{sessionDisplay}</div>
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+              Live
+            </div>
+            <div className="text-base font-semibold text-slate-900">{matchupLabel}</div>
+            {sessionTimeLabel ? (
+              <div className="text-xs text-slate-500">{sessionTimeLabel}</div>
+            ) : null}
           </div>
           <button
             type="button"
@@ -533,7 +555,7 @@ function LivePageContent() {
             <span className="text-amber-600">Select a player to enable actions</span>
           ) : null}
         </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
           <div className="flex flex-wrap gap-2">
             {quarterOptions.map((option) => (
               <ActionButton
@@ -552,17 +574,6 @@ function LivePageContent() {
                 label={option.label}
                 selected={state.context === option.value}
                 onClick={() => dispatch({ type: 'SET_CONTEXT', context: option.value })}
-                className="!min-h-[44px] !w-auto px-3 text-xs"
-              />
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {teamOptions.map((option) => (
-              <ActionButton
-                key={option.value}
-                label={option.label}
-                selected={state.selectedTeam === option.value}
-                onClick={() => dispatch({ type: 'SET_TEAM', team: option.value })}
                 className="!min-h-[44px] !w-auto px-3 text-xs"
               />
             ))}
@@ -595,22 +606,17 @@ function LivePageContent() {
             <div className="text-xs text-amber-600">No scope assigned</div>
           ) : null}
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
           <ActionButton
-            label="Goal"
+            label="Shot"
             tone="primary"
-            disabled={actionsDisabled || !canOffense}
-            onClick={handleGoal}
+            disabled={actionsDisabled || !canShots}
+            onClick={() => setShotModalOpen(true)}
           />
           <ActionButton
             label="Assist"
             disabled={actionsDisabled || !canOffense}
             onClick={handleAssist}
-          />
-          <ActionButton
-            label="Shot"
-            disabled={actionsDisabled || !canShots}
-            onClick={() => setShotModalOpen(true)}
           />
           <ActionButton
             label="Turnover"

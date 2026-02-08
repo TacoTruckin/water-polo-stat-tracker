@@ -67,7 +67,14 @@ export default function LoginPage() {
 
   return (
     <div className="flex w-full flex-1 flex-col items-start gap-6">
-      <h1 className="text-2xl font-semibold text-slate-900">Sign In</h1>
+      <div className="flex flex-col items-start gap-3">
+        <img
+          src="/cwp_logo.svg"
+          alt="Carlsbad Water Polo"
+          className="h-16 w-auto"
+        />
+        <h1 className="text-2xl font-semibold text-slate-900">Sign In</h1>
+      </div>
       <section className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
           Supabase Auth
