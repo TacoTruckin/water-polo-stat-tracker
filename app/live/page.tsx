@@ -498,7 +498,7 @@ function LivePageContent() {
     if (!supabase || !state.sessionId || !user) return;
     let active = true;
     const pingPresence = async () => {
-      if (!active) return;
+      if (!active || !supabase) return;
       await supabase.from('session_presence').upsert(
         {
           session_id: state.sessionId,

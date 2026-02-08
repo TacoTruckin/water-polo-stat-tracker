@@ -261,7 +261,7 @@ function ReviewPageContent() {
         setLoadingEvents(false);
         return;
       }
-      const rows = (data ?? []) as EventRow[];
+      const rows = Array.isArray(data) ? (data as unknown as EventRow[]) : [];
       const normalized = rows.map((row) => {
         if (row.video_segments && Array.isArray(row.video_segments)) {
           return { ...row, video_segments: row.video_segments[0] ?? null };
@@ -427,14 +427,6 @@ function ReviewPageContent() {
       .filter((row) => new Date(row.lastSeen).getTime() >= cutoff);
   }, [isAdmin, presence]);
 
-  const filteredEvents = useMemo(() => {
-    let list = trackerFilter === 'all' ? events : events.filter((event) => event.created_by === trackerFilter);
-    if (isAggregateView && hideDuplicates) {
-      list = list.filter((event) => !duplicateEventIds.has(event.id));
-    }
-    return list;
-  }, [duplicateEventIds, events, hideDuplicates, isAggregateView, trackerFilter]);
-
   const duplicateEventIds = useMemo(() => {
     const windowMs = Math.max(0, dedupeWindowSeconds) * 1000;
     const byKey = new Map<string, EventRow[]>();
@@ -474,6 +466,15 @@ function ReviewPageContent() {
     });
     return duplicates;
   }, [dedupeWindowSeconds, events]);
+
+  const filteredEvents = useMemo(() => {
+    let list =
+      trackerFilter === 'all' ? events : events.filter((event) => event.created_by === trackerFilter);
+    if (isAggregateView && hideDuplicates) {
+      list = list.filter((event) => !duplicateEventIds.has(event.id));
+    }
+    return list;
+  }, [duplicateEventIds, events, hideDuplicates, isAggregateView, trackerFilter]);
 
   const handleExportMarkers = () => {
     if (!isAdmin || events.length === 0) return;
@@ -719,7 +720,10 @@ function ReviewPageContent() {
       }
     });
     if (rosterUpdated) {
-      await supabase.from('games').update({ roster_snapshot: rosterSnapshot }).eq('id', gameId);
+      await supabase
+        .from('games')
+        .update({ roster_snapshot: rosterSnapshot })
+        .eq('id', exportGameId);
     }
 
     const playerIdByNumber = new Map(rosterSnapshot.map((entry) => [entry.number, entry.id]));
@@ -958,7 +962,7 @@ function ReviewPageContent() {
               <button
                 type="button"
                 className="min-h-[44px] rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                onClick={handleExportAuditedPackage}
+                onClick={() => handleExportAuditedPackage()}
                 disabled={exporting}
               >
                 {exporting ? 'Exporting…' : 'Export JSON'}
