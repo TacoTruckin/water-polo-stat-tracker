@@ -15,6 +15,18 @@ type Game = {
   location: string | null;
 };
 
+type AdminNotification = {
+  id: string;
+  type: string;
+  status: 'open' | 'completed';
+  message: string;
+  user_id: string | null;
+  user_email: string | null;
+  created_at: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
+};
+
 type Session = {
   id: string;
   game_id: string;
@@ -32,6 +44,7 @@ export default function HomePage() {
 
   const [games, setGames] = useState<Game[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [gamesLoading, setGamesLoading] = useState(false);
   const [gamesError, setGamesError] = useState<string | null>(null);
   const [startingGameId, setStartingGameId] = useState<string | null>(null);
@@ -68,17 +81,53 @@ export default function HomePage() {
 
     setGames((gamesRes.data ?? []) as Game[]);
     setSessions((sessionsRes.data ?? []) as Session[]);
+    if (profile?.role === 'super_admin') {
+      const { data: notificationsData } = await supabase
+        .from('admin_notifications')
+        .select('id, type, status, message, user_id, user_email, created_at, resolved_at, resolved_by')
+        .eq('status', 'open')
+        .order('created_at', { ascending: false });
+      setNotifications((notificationsData ?? []) as AdminNotification[]);
+    } else {
+      setNotifications([]);
+    }
     setGamesLoading(false);
-  }, [user]);
+  }, [profile?.role, user]);
 
   useEffect(() => {
     if (!canUseSupabase || !user) {
       setGames([]);
       setSessions([]);
+      setNotifications([]);
       return;
     }
     void loadData();
   }, [canUseSupabase, loadData, user]);
+
+  useEffect(() => {
+    if (!canUseSupabase || !user || profile?.role !== 'super_admin') return;
+    const supabaseClient = supabase;
+    if (!supabaseClient) return;
+    const channel = supabaseClient.channel('admin-notifications');
+    channel.on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'admin_notifications' },
+      () => {
+        void loadData();
+      }
+    );
+    channel.on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'admin_notifications' },
+      () => {
+        void loadData();
+      }
+    );
+    channel.subscribe();
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [canUseSupabase, loadData, profile?.role, user]);
 
   const formatGameTime = useMemo(() => {
     return (startTime: string) => {
@@ -147,6 +196,19 @@ export default function HomePage() {
     setStartingGameId(null);
   };
 
+  const handleResolveNotification = async (notificationId: string) => {
+    if (!supabase || !user || profile?.role !== 'super_admin') return;
+    await supabase
+      .from('admin_notifications')
+      .update({
+        status: 'completed',
+        resolved_at: new Date().toISOString(),
+        resolved_by: user.id
+      })
+      .eq('id', notificationId);
+    setNotifications((prev) => prev.filter((item) => item.id !== notificationId));
+  };
+
   if (!canUseSupabase) {
     return (
       <div className="flex w-full flex-1 flex-col gap-6">
@@ -189,19 +251,19 @@ export default function HomePage() {
             <>
               <Link
                 href="/admin"
-                className="min-h-[44px] rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700"
+                className="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700"
               >
                 Admin Overview
               </Link>
               <Link
                 href="/admin/games"
-                className="min-h-[44px] rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700"
+                className="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700"
               >
                 Manage Games
               </Link>
               <Link
                 href="/admin/users"
-                className="min-h-[44px] rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700"
+                className="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700"
               >
                 Users
               </Link>
@@ -216,6 +278,40 @@ export default function HomePage() {
           </button>
         </div>
       </div>
+
+      {profile?.role === 'super_admin' ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+            New User Signups
+          </div>
+          {notifications.length === 0 ? (
+            <p className="mt-2 text-sm text-slate-600">No new signups.</p>
+          ) : (
+            <div className="mt-3 grid gap-2">
+              {notifications.map((note) => (
+                <div
+                  key={note.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700"
+                >
+                  <div>
+                    <div className="font-semibold">{note.user_email ?? note.message}</div>
+                    <div className="text-xs text-slate-500">
+                      {new Date(note.created_at).toLocaleString()}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="min-h-[36px] rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700"
+                    onClick={() => handleResolveNotification(note.id)}
+                  >
+                    Mark completed
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : null}
 
       {gamesError ? <p className="text-sm text-red-600">{gamesError}</p> : null}
       {gamesLoading ? (
