@@ -74,6 +74,10 @@ export type GameEvent = {
   gameClockMs: number;
   wallClockMs: number;
   displayTime: string;
+  clockDisplay?: string;
+  eventElapsedGameSeconds?: number;
+  segmentId?: string | null;
+  eventVideoSeconds?: number | null;
   createdBy?: string;
   eventScope?: SessionScope;
   notes?: string;

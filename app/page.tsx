@@ -122,7 +122,6 @@ export default function HomePage() {
         .insert({
           game_id: game.id,
           role_scope: 'BOTH',
-          started_at: new Date().toISOString(),
           created_by: user.id
         })
         .select('id, started_at, created_at')

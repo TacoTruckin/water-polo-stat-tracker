@@ -7,7 +7,7 @@ import { GameHeaderLabel } from '@/components/GameHeaderLabel';
 
 export const metadata = {
   title: 'Water Polo Stat Tracker',
-  description: 'Tablet-first stat tracking for water polo'
+  description: 'Water polo stats, done right.'
 };
 
 export const viewport: Viewport = {

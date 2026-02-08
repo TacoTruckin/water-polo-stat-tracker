@@ -38,6 +38,17 @@ const defensiveActions: { label: string; eventType: EventType }[] = [
   { label: 'Def Exclusion', eventType: EventType.DEF_EXCLUSION_DRAWN }
 ];
 
+type VideoSegment = {
+  id: string;
+  segment_index: number;
+  segment_start_game_seconds: number;
+  segment_end_game_seconds: number | null;
+  label: string | null;
+  source_type: 'youtube' | 'file' | 'unknown' | null;
+  source_url: string | null;
+  notes: string | null;
+};
+
 function ActionButton({
   label,
   tone = 'neutral',
@@ -99,6 +110,7 @@ function LivePageContent() {
     roleScope: SessionScope | null;
     status: 'not_started' | 'running' | 'paused' | 'ended' | null;
     scheduledAt: string | null;
+    quarterLengthSeconds: number | null;
   } | null>(null);
   const [turnoverPickerOpen, setTurnoverPickerOpen] = useState(false);
   const [shotModalOpen, setShotModalOpen] = useState(false);
@@ -107,6 +119,14 @@ function LivePageContent() {
   const toastTimerRef = useRef<number | null>(null);
   const contextTimerRef = useRef<number | null>(null);
   const [undoUsed, setUndoUsed] = useState(false);
+  const [segments, setSegments] = useState<VideoSegment[]>([]);
+  const [segmentLabel, setSegmentLabel] = useState('');
+  const [segmentSourceType, setSegmentSourceType] = useState<'youtube' | 'file' | 'unknown'>(
+    'youtube'
+  );
+  const [segmentSourceUrl, setSegmentSourceUrl] = useState('');
+  const [segmentNotes, setSegmentNotes] = useState('');
+  const [segmentBusy, setSegmentBusy] = useState(false);
   const eventsRef = useRef(state.events);
 
   const sessionIdParam = searchParams.get('sessionId');
@@ -138,6 +158,7 @@ function LivePageContent() {
   const canShots = canOffense;
   const hasScope = state.sessionId ? effectiveScope !== null : false;
   const isEnded = sessionInfo?.status === 'ended';
+  const quarterLengthSeconds = sessionInfo?.quarterLengthSeconds ?? 480;
   const canTrackToday = useCallback((scheduledAt: string | null) => {
     if (!scheduledAt) return true;
     const gameDate = new Date(scheduledAt);
@@ -151,6 +172,10 @@ function LivePageContent() {
   const trackingLockedByDate =
     profile?.role === 'tracker' && !canTrackToday(sessionInfo?.scheduledAt ?? null);
   const actionsDisabled = !state.selectedPlayer || !hasScope || isEnded || trackingLockedByDate;
+  const activeSegment = useMemo(
+    () => segments.find((segment) => !segment.segment_end_game_seconds) ?? null,
+    [segments]
+  );
   const lastOwnedEvent = useMemo(() => {
     if (!state.sessionId || !user) return null;
     for (let i = state.events.length - 1; i >= 0; i -= 1) {
@@ -174,6 +199,15 @@ function LivePageContent() {
     [state.clock]
   );
 
+  const getElapsedGameSeconds = useCallback(
+    (atMs: number) => {
+      const clockMs = getCurrentClockMs(atMs);
+      const elapsedThisQuarter = Math.max(0, Math.floor(clockMs / 1000));
+      return (state.quarter - 1) * quarterLengthSeconds + elapsedThisQuarter;
+    },
+    [getCurrentClockMs, quarterLengthSeconds, state.quarter]
+  );
+
   const logEventToDb = useCallback(
     async (event: GameEvent) => {
       const gameId = sessionInfo?.gameId ?? state.gameId;
@@ -189,7 +223,11 @@ function LivePageContent() {
         quarter: event.quarter,
         context: event.context,
         clock_ms: event.gameClockMs,
+        clock_display: event.clockDisplay ?? event.displayTime,
+        event_elapsed_game_seconds: event.eventElapsedGameSeconds ?? null,
         occurred_at: event.createdAt,
+        segment_id: event.segmentId ?? null,
+        event_video_seconds: event.eventVideoSeconds ?? null,
         payload: {
           shot: event.shot ?? null,
           notes: event.notes ?? null
@@ -224,6 +262,8 @@ function LivePageContent() {
       if (isEnded || trackingLockedByDate) return null;
       const wallClockMs = Date.now();
       const gameClockMs = getCurrentClockMs(wallClockMs);
+      const eventElapsedGameSeconds = getElapsedGameSeconds(wallClockMs);
+      const clockDisplay = `${periodLabel} ${formatClock(gameClockMs)}`;
       const event = {
         id: createEventId(),
         gameId: sessionInfo?.gameId ?? state.gameId,
@@ -231,7 +271,9 @@ function LivePageContent() {
         period: state.quarter,
         gameClockMs,
         wallClockMs,
-        displayTime: `${periodLabel} ${formatClock(gameClockMs)}`,
+        displayTime: clockDisplay,
+        clockDisplay,
+        eventElapsedGameSeconds,
         createdBy: user?.id,
         eventScope,
         ...payload
@@ -252,6 +294,7 @@ function LivePageContent() {
     [
       dispatch,
       getCurrentClockMs,
+      getElapsedGameSeconds,
       isEnded,
       trackingLockedByDate,
       logEventToDb,
@@ -359,6 +402,79 @@ function LivePageContent() {
     }
   };
 
+  const handleStartSegment = async () => {
+    if (!supabase || !sessionInfo?.gameId || !user) return;
+    if (profile?.role !== 'super_admin' || isEnded) return;
+    setSegmentBusy(true);
+    const nowSeconds = getElapsedGameSeconds(Date.now());
+    let workingSegments = segments;
+    if (activeSegment) {
+      const endSeconds = Math.max(activeSegment.segment_start_game_seconds, nowSeconds);
+      const { error } = await supabase
+        .from('video_segments')
+        .update({ segment_end_game_seconds: endSeconds })
+        .eq('id', activeSegment.id);
+      if (!error) {
+        workingSegments = workingSegments.map((segment) =>
+          segment.id === activeSegment.id
+            ? { ...segment, segment_end_game_seconds: endSeconds }
+            : segment
+        );
+      }
+    }
+    const nextIndex =
+      workingSegments.reduce((max, segment) => Math.max(max, segment.segment_index), 0) + 1;
+    const label = segmentLabel.trim() || `Segment ${nextIndex}`;
+    const { data, error } = await supabase
+      .from('video_segments')
+      .insert({
+        game_id: sessionInfo.gameId,
+        segment_index: nextIndex,
+        segment_start_game_seconds: nowSeconds,
+        label,
+        source_type: segmentSourceType,
+        source_url: segmentSourceUrl.trim() || null,
+        notes: segmentNotes.trim() || null,
+        created_by: user.id
+      })
+      .select(
+        'id, segment_index, segment_start_game_seconds, segment_end_game_seconds, label, source_type, source_url, notes'
+      )
+      .single();
+    if (!error && data) {
+      const updated = [...workingSegments, data as VideoSegment].sort(
+        (a, b) => a.segment_index - b.segment_index
+      );
+      setSegments(updated);
+      setSegmentLabel('');
+      setSegmentSourceUrl('');
+      setSegmentNotes('');
+    }
+    setSegmentBusy(false);
+  };
+
+  const handleEndSegment = async () => {
+    if (!supabase || !activeSegment) return;
+    if (profile?.role !== 'super_admin' || isEnded) return;
+    setSegmentBusy(true);
+    const nowSeconds = getElapsedGameSeconds(Date.now());
+    const endSeconds = Math.max(activeSegment.segment_start_game_seconds, nowSeconds);
+    const { error } = await supabase
+      .from('video_segments')
+      .update({ segment_end_game_seconds: endSeconds })
+      .eq('id', activeSegment.id);
+    if (!error) {
+      setSegments((prev) =>
+        prev.map((segment) =>
+          segment.id === activeSegment.id
+            ? { ...segment, segment_end_game_seconds: endSeconds }
+            : segment
+        )
+      );
+    }
+    setSegmentBusy(false);
+  };
+
   useEffect(() => {
     eventsRef.current = state.events;
   }, [state.events]);
@@ -377,6 +493,28 @@ function LivePageContent() {
       dispatch({ type: 'SET_SESSION', sessionId: sessionIdParam });
     }
   }, [dispatch, sessionIdParam, state.sessionId]);
+
+  useEffect(() => {
+    if (!supabase || !state.sessionId || !user) return;
+    let active = true;
+    const pingPresence = async () => {
+      if (!active) return;
+      await supabase.from('session_presence').upsert(
+        {
+          session_id: state.sessionId,
+          user_id: user.id,
+          last_seen_at: new Date().toISOString()
+        },
+        { onConflict: 'session_id,user_id' }
+      );
+    };
+    void pingPresence();
+    const interval = window.setInterval(pingPresence, 30000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [state.sessionId, user, supabase]);
 
   useEffect(() => {
     if (state.selectedTeam !== 'US') {
@@ -412,7 +550,9 @@ function LivePageContent() {
     const loadSession = async () => {
       const { data } = await supabaseClient
         .from('sessions')
-        .select('id, game_id, role_scope, status, started_at, created_at, games(opponent_name, scheduled_at)')
+        .select(
+          'id, game_id, role_scope, status, started_at, created_at, quarter_length_seconds, games(opponent_name, scheduled_at)'
+        )
         .eq('id', state.sessionId)
         .maybeSingle();
       if (!active) return;
@@ -426,13 +566,15 @@ function LivePageContent() {
       const startedAt = data.started_at ?? data.created_at ?? null;
       const gameId = data.game_id ?? null;
       const roleScope = (data.role_scope as SessionScope) ?? null;
+      const quarterLengthSeconds = data.quarter_length_seconds ?? null;
       setSessionInfo({
         opponent,
         startedAt,
         gameId,
         roleScope,
         status: (data.status as 'not_started' | 'running' | 'paused' | 'ended' | null) ?? null,
-        scheduledAt
+        scheduledAt,
+        quarterLengthSeconds
       });
       const nextCreatedAt = startedAt ? Date.parse(startedAt) : Date.now();
       dispatch({
@@ -448,6 +590,28 @@ function LivePageContent() {
     };
   }, [dispatch, state.sessionId]);
 
+  const loadSegments = useCallback(async () => {
+    if (!supabase || !sessionInfo?.gameId) return;
+    const { data } = await supabase
+      .from('video_segments')
+      .select(
+        'id, segment_index, segment_start_game_seconds, segment_end_game_seconds, label, source_type, source_url, notes'
+      )
+      .eq('game_id', sessionInfo.gameId)
+      .order('segment_index', { ascending: true });
+    if (data) {
+      setSegments(data as VideoSegment[]);
+    }
+  }, [sessionInfo?.gameId]);
+
+  useEffect(() => {
+    if (profile?.role !== 'super_admin') {
+      setSegments([]);
+      return;
+    }
+    void loadSegments();
+  }, [loadSegments, profile?.role]);
+
   useEffect(() => {
     const supabaseClient = supabase;
     if (!supabaseClient || !state.sessionId) return;
@@ -459,6 +623,8 @@ function LivePageContent() {
       const wallClockMs = occurredAt ? Date.parse(occurredAt) : 0;
       const gameClockMs = row.clock_ms ?? 0;
       const periodLabelLocal = quarter === 5 ? 'OT' : `Q${quarter}`;
+      const clockDisplay =
+        row.clock_display ?? (gameClockMs ? `${periodLabelLocal} ${formatClock(gameClockMs)}` : periodLabelLocal);
       return {
         id: row.id,
         gameId: row.game_id ?? state.gameId ?? row.session_id,
@@ -471,7 +637,11 @@ function LivePageContent() {
         period: quarter,
         gameClockMs,
         wallClockMs,
-        displayTime: gameClockMs ? `${periodLabelLocal} ${formatClock(gameClockMs)}` : periodLabelLocal,
+        displayTime: clockDisplay,
+        clockDisplay,
+        eventElapsedGameSeconds: row.event_elapsed_game_seconds ?? undefined,
+        segmentId: row.segment_id ?? null,
+        eventVideoSeconds: row.event_video_seconds ?? null,
         shot: row.payload?.shot ?? undefined,
         notes: row.payload?.notes ?? undefined,
         createdBy: row.created_by ?? undefined
@@ -549,6 +719,11 @@ function LivePageContent() {
         day: 'numeric'
       })
     : '';
+  const segmentStatusLabel = activeSegment
+    ? `Segment ${activeSegment.segment_index} live`
+    : segments.length > 0
+      ? 'No active segment'
+      : 'No segments';
   const lastEvent = state.events[state.events.length - 1];
   const lastEventLabel = lastEvent
     ? `${lastEvent.displayTime} • ${lastEvent.eventType} • ${lastEvent.context} #${lastEvent.playerNumber}`
@@ -586,6 +761,11 @@ function LivePageContent() {
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
               Live
             </div>
+            {profile?.role === 'super_admin' ? (
+              <div className="mt-1 inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                Video: {segmentStatusLabel}
+              </div>
+            ) : null}
             {sessionTimeLabel ? (
               <div className="text-xs text-slate-500">Session started {sessionTimeLabel}</div>
             ) : null}
@@ -652,6 +832,78 @@ function LivePageContent() {
           </div>
         </div>
       </section>
+
+      {profile?.role === 'super_admin' ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+              Video Segments
+            </div>
+            <div className="text-xs font-semibold text-slate-600">{segmentStatusLabel}</div>
+          </div>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+              Label
+              <input
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                value={segmentLabel}
+                onChange={(event) => setSegmentLabel(event.target.value)}
+                placeholder="Segment label"
+              />
+            </label>
+            <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+              Source Type
+              <select
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                value={segmentSourceType}
+                onChange={(event) =>
+                  setSegmentSourceType(event.target.value as 'youtube' | 'file' | 'unknown')
+                }
+              >
+                <option value="youtube">YouTube</option>
+                <option value="file">File</option>
+                <option value="unknown">Unknown</option>
+              </select>
+            </label>
+            <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400 md:col-span-2">
+              Source URL
+              <input
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                value={segmentSourceUrl}
+                onChange={(event) => setSegmentSourceUrl(event.target.value)}
+                placeholder="https://youtu.be/..."
+              />
+            </label>
+            <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400 md:col-span-2">
+              Notes
+              <input
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                value={segmentNotes}
+                onChange={(event) => setSegmentNotes(event.target.value)}
+                placeholder="Optional notes"
+              />
+            </label>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="min-h-[44px] rounded-lg border border-slate-900 bg-slate-900 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={handleStartSegment}
+              disabled={segmentBusy || isEnded}
+            >
+              {activeSegment ? 'Start New Segment' : 'Start Segment'}
+            </button>
+            <button
+              type="button"
+              className="min-h-[44px] rounded-lg border border-slate-200 px-4 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={handleEndSegment}
+              disabled={!activeSegment || segmentBusy || isEnded}
+            >
+              End Segment
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4">
         <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Players</div>
