@@ -19,10 +19,8 @@ const quarterOptions: { value: Quarter; label: string }[] = [
 ];
 
 const contextOptions: { value: Context; label: string }[] = [
-  { value: 'EVEN', label: 'Even' },
   { value: 'MAN_UP', label: 'Man-Up' },
   { value: 'MAN_DOWN', label: 'Man-Down' },
-  { value: 'COUNTER', label: 'Counter' },
   { value: 'FIVE_M', label: '5M' }
 ];
 
@@ -62,11 +60,11 @@ function ActionButton({
   const toneStyles =
     tone === 'primary'
       ? disabled
-        ? 'border-slate-300 bg-slate-200 text-slate-500'
+        ? 'border-slate-400 bg-slate-200 text-slate-500'
         : 'border-slate-900 bg-slate-900 text-white'
       : disabled
-        ? 'border-slate-200 bg-slate-100 text-slate-400'
-        : 'border-slate-200 bg-white text-slate-700';
+        ? 'border-slate-300 bg-slate-100 text-slate-400'
+        : 'border-slate-300 bg-white text-slate-700';
   const selectedStyles = selected ? 'ring-2 ring-slate-900' : '';
   const disabledStyles = disabled ? 'cursor-not-allowed' : '';
 
@@ -212,7 +210,11 @@ function LivePageContent() {
       dispatch({ type: 'ADD_EVENT', event });
       void logEventToDb(event);
       showToast('Saved!');
-      if (state.context === 'MAN_UP' || state.context === 'MAN_DOWN') {
+      if (
+        state.context === 'MAN_UP' ||
+        state.context === 'MAN_DOWN' ||
+        state.context === 'COUNTER'
+      ) {
         dispatch({ type: 'SET_CONTEXT', context: 'EVEN' });
       }
       return event;
@@ -479,29 +481,16 @@ function LivePageContent() {
     };
   }, [dispatch, state.gameId, state.sessionId]);
 
-  const opponentLabel = sessionInfo?.opponent?.trim()
-    ? sessionInfo.opponent.trim()
-    : state.opponent.trim()
-      ? state.opponent.trim()
-      : '(Unknown)';
   const sessionTimeLabel = sessionInfo?.startedAt
     ? new Date(sessionInfo.startedAt).toLocaleString()
     : state.createdAt
       ? new Date(state.createdAt).toLocaleString()
       : '';
-  const matchupLabel = `CBAD vs ${opponentLabel}`;
   const lastEvent = state.events[state.events.length - 1];
   const lastEventLabel = lastEvent
     ? `${lastEvent.displayTime} • ${lastEvent.eventType} • ${lastEvent.context} #${lastEvent.playerNumber}`
     : 'No events yet';
   const needsPlayer = !state.selectedPlayer;
-  const checkerboardStyle = {
-    backgroundColor: '#0f172a',
-    backgroundImage:
-      'linear-gradient(45deg, rgba(255,255,255,0.05) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.05) 75%, rgba(255,255,255,0.05)), linear-gradient(45deg, rgba(255,255,255,0.05) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.05) 75%, rgba(255,255,255,0.05))',
-    backgroundPosition: '0 0, 20px 20px',
-    backgroundSize: '40px 40px'
-  } as const;
 
   if (authLoading) {
     return (
@@ -526,19 +515,15 @@ function LivePageContent() {
   }
 
   return (
-    <div
-      className="flex w-full flex-1 flex-col gap-5 pb-10"
-      style={checkerboardStyle}
-    >
+    <div className="flex w-full flex-1 flex-col gap-5 pb-10">
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
               Live
             </div>
-            <div className="text-base font-semibold text-slate-900">{matchupLabel}</div>
             {sessionTimeLabel ? (
-              <div className="text-xs text-slate-500">{sessionTimeLabel}</div>
+              <div className="text-xs text-slate-500">Session started {sessionTimeLabel}</div>
             ) : null}
           </div>
           <button
