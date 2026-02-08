@@ -52,7 +52,23 @@ export type GameAction =
 
 export const STORAGE_KEY = 'water-polo-stat-tracker:v1';
 
-const seedRoster = ['1', '2', '3', '4', '5', '6', '7'];
+const seedRoster = [
+  '1',
+  '2',
+  '3',
+  '4',
+  '5',
+  '6',
+  '7',
+  '8',
+  '9',
+  '10',
+  '11',
+  '12',
+  '13',
+  '14',
+  '15'
+];
 
 const defaultSettings: Settings = {
   enableGoalAllowedPrimaryDef: false,

@@ -63,10 +63,14 @@ function ActionButton({
   const base = 'min-h-[56px] w-full rounded-xl border px-3 text-sm font-semibold md:text-base';
   const toneStyles =
     tone === 'primary'
-      ? 'border-slate-900 bg-slate-900 text-white'
-      : 'border-slate-200 bg-white text-slate-700';
+      ? disabled
+        ? 'border-slate-300 bg-slate-200 text-slate-500'
+        : 'border-slate-900 bg-slate-900 text-white'
+      : disabled
+        ? 'border-slate-200 bg-slate-100 text-slate-400'
+        : 'border-slate-200 bg-white text-slate-700';
   const selectedStyles = selected ? 'ring-2 ring-slate-900' : '';
-  const disabledStyles = disabled ? 'cursor-not-allowed opacity-50' : '';
+  const disabledStyles = disabled ? 'cursor-not-allowed' : '';
 
   return (
     <button
@@ -96,6 +100,8 @@ function LivePageContent() {
   const [turnoverPickerOpen, setTurnoverPickerOpen] = useState(false);
   const [shotModalOpen, setShotModalOpen] = useState(false);
   const [lastShotZone, setLastShotZone] = useState<ShotZone | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
   const eventsRef = useRef(state.events);
 
   const sessionIdParam = searchParams.get('sessionId');
@@ -103,7 +109,7 @@ function LivePageContent() {
   const playerOptions = (() => {
     if (state.selectedTeam === 'US') return state.roster.us;
     if (state.roster.them && state.roster.them.length > 0) return state.roster.them;
-    return Array.from({ length: 14 }, (_, index) => `O${index + 1}`);
+    return Array.from({ length: 15 }, (_, index) => `O${index + 1}`);
   })();
 
   const createEventId = () => {
@@ -166,6 +172,16 @@ function LivePageContent() {
     [sessionInfo?.gameId, state.gameId, state.sessionId, user]
   );
 
+  const showToast = useCallback((message: string) => {
+    setToastMessage(message);
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = window.setTimeout(() => {
+      setToastMessage(null);
+    }, 1200);
+  }, []);
+
   const logEvent = useCallback(
     (
       payload: {
@@ -194,9 +210,20 @@ function LivePageContent() {
       };
       dispatch({ type: 'ADD_EVENT', event });
       void logEventToDb(event);
+      showToast('Saved!');
       return event;
     },
-    [dispatch, getCurrentClockMs, logEventToDb, periodLabel, sessionInfo?.gameId, state.gameId, state.quarter, user?.id]
+    [
+      dispatch,
+      getCurrentClockMs,
+      logEventToDb,
+      periodLabel,
+      sessionInfo?.gameId,
+      showToast,
+      state.gameId,
+      state.quarter,
+      user?.id
+    ]
   );
 
   const handleGoal = () => {
@@ -290,6 +317,14 @@ function LivePageContent() {
   useEffect(() => {
     eventsRef.current = state.events;
   }, [state.events]);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!sessionIdParam) return;
@@ -439,6 +474,11 @@ function LivePageContent() {
   const sessionDisplay = sessionTimeLabel
     ? `vs ${opponentLabel} — ${sessionTimeLabel}`
     : `vs ${opponentLabel}`;
+  const lastEvent = state.events[state.events.length - 1];
+  const lastEventLabel = lastEvent
+    ? `${lastEvent.displayTime} • ${lastEvent.eventType} #${lastEvent.playerNumber}`
+    : 'No events yet';
+  const needsPlayer = !state.selectedPlayer;
 
   if (authLoading) {
     return (
@@ -478,6 +518,12 @@ function LivePageContent() {
             Undo
           </button>
         </div>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <span className="font-semibold text-slate-600">Last event: {lastEventLabel}</span>
+          {needsPlayer ? (
+            <span className="text-amber-600">Select a player to enable actions</span>
+          ) : null}
+        </div>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <div className="flex flex-wrap gap-2">
             {quarterOptions.map((option) => (
@@ -486,6 +532,7 @@ function LivePageContent() {
                 label={option.label}
                 selected={state.quarter === option.value}
                 onClick={() => dispatch({ type: 'SET_QUARTER', quarter: option.value })}
+                className="!min-h-[44px] !w-auto px-3 text-xs"
               />
             ))}
           </div>
@@ -496,6 +543,7 @@ function LivePageContent() {
                 label={option.label}
                 selected={state.context === option.value}
                 onClick={() => dispatch({ type: 'SET_CONTEXT', context: option.value })}
+                className="!min-h-[44px] !w-auto px-3 text-xs"
               />
             ))}
           </div>
@@ -506,6 +554,7 @@ function LivePageContent() {
                 label={option.label}
                 selected={state.selectedTeam === option.value}
                 onClick={() => dispatch({ type: 'SET_TEAM', team: option.value })}
+                className="!min-h-[44px] !w-auto px-3 text-xs"
               />
             ))}
           </div>
@@ -514,13 +563,14 @@ function LivePageContent() {
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4">
         <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Players</div>
-        <div className="mt-3 grid grid-cols-7 gap-2">
+        <div className="mt-3 grid grid-cols-5 gap-2 sm:grid-cols-7 md:grid-cols-10">
           {playerOptions.map((player) => (
             <ActionButton
               key={player}
               label={player}
               selected={state.selectedPlayer === player}
               onClick={() => dispatch({ type: 'SET_PLAYER', player })}
+              className="!min-h-[44px] text-sm"
             />
           ))}
         </div>
@@ -595,6 +645,11 @@ function LivePageContent() {
         onSelect={handleShotSave}
         initialZone={lastShotZone}
       />
+      {toastMessage ? (
+        <div className="pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-lg">
+          {toastMessage}
+        </div>
+      ) : null}
     </div>
   );
 }
