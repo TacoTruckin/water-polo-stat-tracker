@@ -104,6 +104,7 @@ function LivePageContent() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimerRef = useRef<number | null>(null);
   const contextTimerRef = useRef<number | null>(null);
+  const [undoUsed, setUndoUsed] = useState(false);
   const eventsRef = useRef(state.events);
 
   const sessionIdParam = searchParams.get('sessionId');
@@ -135,6 +136,15 @@ function LivePageContent() {
   const canShots = canOffense;
   const hasScope = state.sessionId ? effectiveScope !== null : false;
   const actionsDisabled = !state.selectedPlayer || !hasScope;
+  const lastOwnedEvent = useMemo(() => {
+    if (!state.sessionId || !user) return null;
+    for (let i = state.events.length - 1; i >= 0; i -= 1) {
+      const event = state.events[i];
+      if (event.createdBy === user.id) return event;
+    }
+    return null;
+  }, [state.events, state.sessionId, user]);
+  const canUndo = state.sessionId ? Boolean(lastOwnedEvent) : state.events.length > 0;
 
   const getCurrentClockMs = useCallback(
     (atMs: number) => {
@@ -210,6 +220,7 @@ function LivePageContent() {
       dispatch({ type: 'ADD_EVENT', event });
       void logEventToDb(event);
       showToast('Saved!');
+      setUndoUsed(false);
       if (
         state.context === 'MAN_UP' ||
         state.context === 'MAN_DOWN' ||
@@ -297,17 +308,19 @@ function LivePageContent() {
   };
 
   const handleUndo = async () => {
-    if (state.events.length === 0) return;
+    if (!canUndo || undoUsed) return;
     if (state.sessionId && supabase && user) {
-      const lastOwned = [...state.events].reverse().find((event) => event.createdBy === user.id);
+      const lastOwned = lastOwnedEvent;
       if (!lastOwned) return;
       const { error } = await supabase.from('events').delete().eq('id', lastOwned.id);
       if (!error) {
         dispatch({ type: 'DELETE_EVENT', id: lastOwned.id });
+        setUndoUsed(true);
       }
       return;
     }
     dispatch({ type: 'UNDO' });
+    setUndoUsed(true);
   };
 
   useEffect(() => {
@@ -491,6 +504,7 @@ function LivePageContent() {
     ? `${lastEvent.displayTime} • ${lastEvent.eventType} • ${lastEvent.context} #${lastEvent.playerNumber}`
     : 'No events yet';
   const needsPlayer = !state.selectedPlayer;
+  const undoDisabled = !canUndo || undoUsed;
 
   if (authLoading) {
     return (
@@ -528,8 +542,9 @@ function LivePageContent() {
           </div>
           <button
             type="button"
-            className="min-h-[44px] rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700"
+            className="min-h-[44px] rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
             onClick={handleUndo}
+            disabled={undoDisabled}
           >
             Undo
           </button>
