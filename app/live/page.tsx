@@ -151,12 +151,12 @@ function LivePageContent() {
   const periodLabel = state.quarter === 5 ? 'OT' : `Q${state.quarter}`;
 
   const sessionScope = sessionInfo?.roleScope ?? null;
-  const effectiveScope: SessionScope | null =
-    profile?.role === 'super_admin' ? 'BOTH' : sessionScope;
+  const effectiveScope: SessionScope =
+    profile?.role === 'super_admin' ? 'BOTH' : sessionScope ?? 'BOTH';
   const canOffense = effectiveScope === 'OFFENSE' || effectiveScope === 'BOTH';
   const canDefense = effectiveScope === 'DEFENSE' || effectiveScope === 'BOTH';
   const canShots = canOffense;
-  const hasScope = state.sessionId ? effectiveScope !== null : false;
+  const hasScope = Boolean(state.sessionId);
   const isEnded = sessionInfo?.status === 'ended';
   const quarterLengthSeconds = sessionInfo?.quarterLengthSeconds ?? 480;
   const canTrackToday = useCallback((scheduledAt: string | null) => {
@@ -926,9 +926,6 @@ function LivePageContent() {
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
             Offense
           </div>
-          {!hasScope ? (
-            <div className="text-xs text-amber-600">No scope assigned</div>
-          ) : null}
         </div>
         <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
           <ActionButton
