@@ -12,6 +12,7 @@ export type Settings = {
 export type Roster = {
   us: string[];
   them?: string[];
+  names?: Record<string, string>;
 };
 
 export type GameState = {
@@ -67,8 +68,28 @@ const seedRoster = [
   '12',
   '13',
   '14',
-  '15'
+  '15',
+  '16'
 ];
+
+const seedNames: Record<string, string> = {
+  '1': 'Max',
+  '2': 'Bennett',
+  '3': 'BK',
+  '4': 'Marco',
+  '5': 'Danny',
+  '6': 'Jasper',
+  '7': 'Arhan',
+  '8': 'George',
+  '9': 'Elias',
+  '10': 'Connor',
+  '11': 'Leo',
+  '12': 'Drew',
+  '13': 'Kaikea',
+  '14': 'Sasha',
+  '15': 'Wes',
+  '16': 'Santiago'
+};
 
 const defaultSettings: Settings = {
   enableGoalAllowedPrimaryDef: false,
@@ -97,7 +118,7 @@ export function createInitialState(): GameState {
     events: [],
     undoStack: [],
     settings: { ...defaultSettings },
-    roster: { us: [...seedRoster] },
+    roster: { us: [...seedRoster], names: { ...seedNames } },
     gameId: createGameId(),
     clock: { ...defaultClock },
     opponent: '',
@@ -121,11 +142,17 @@ function withUndo(state: GameState, events: GameEvent[]): GameState {
 function mergeStateWithDefaults(raw: Partial<GameState> | null): GameState {
   const base = createInitialState();
   if (!raw || typeof raw !== 'object') return base;
+  const storedRoster = raw.roster?.us ?? base.roster.us;
+  const normalizedRoster =
+    storedRoster.length >= base.roster.us.length
+      ? storedRoster
+      : [...storedRoster, ...base.roster.us.slice(storedRoster.length)];
+  const mergedNames = { ...base.roster.names, ...(raw.roster?.names ?? {}) };
   return {
     ...base,
     ...raw,
     settings: { ...base.settings, ...raw.settings },
-    roster: { ...base.roster, ...raw.roster },
+    roster: { ...base.roster, ...raw.roster, us: normalizedRoster, names: mergedNames },
     clock: { ...base.clock, ...raw.clock },
     events: Array.isArray(raw.events) ? raw.events : base.events,
     undoStack: Array.isArray(raw.undoStack) ? raw.undoStack : base.undoStack,

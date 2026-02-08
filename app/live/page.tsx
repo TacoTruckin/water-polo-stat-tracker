@@ -50,6 +50,7 @@ function ActionButton({
   tone = 'neutral',
   selected = false,
   disabled = false,
+  subLabel,
   className = '',
   onClick
 }: {
@@ -57,10 +58,12 @@ function ActionButton({
   tone?: 'neutral' | 'primary';
   selected?: boolean;
   disabled?: boolean;
+  subLabel?: string;
   className?: string;
   onClick?: () => void;
 }) {
-  const base = 'min-h-[56px] w-full rounded-xl border px-3 text-sm font-semibold md:text-base';
+  const base =
+    'flex min-h-[56px] w-full flex-col items-center justify-center rounded-xl border px-3 text-sm font-semibold leading-tight md:text-base';
   const toneStyles =
     tone === 'primary'
       ? disabled
@@ -80,7 +83,12 @@ function ActionButton({
       aria-pressed={selected}
       disabled={disabled}
     >
-      {label}
+      <span>{label}</span>
+      {subLabel ? (
+        <span className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+          {subLabel}
+        </span>
+      ) : null}
     </button>
   );
 }
@@ -109,8 +117,9 @@ function LivePageContent() {
   const playerOptions = (() => {
     if (state.selectedTeam === 'US') return state.roster.us;
     if (state.roster.them && state.roster.them.length > 0) return state.roster.them;
-    return Array.from({ length: 15 }, (_, index) => `O${index + 1}`);
+    return Array.from({ length: 16 }, (_, index) => `O${index + 1}`);
   })();
+  const playerNames = state.roster.names ?? {};
 
   const createEventId = () => {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -476,7 +485,7 @@ function LivePageContent() {
     : `vs ${opponentLabel}`;
   const lastEvent = state.events[state.events.length - 1];
   const lastEventLabel = lastEvent
-    ? `${lastEvent.displayTime} • ${lastEvent.eventType} #${lastEvent.playerNumber}`
+    ? `${lastEvent.displayTime} • ${lastEvent.eventType} • ${lastEvent.context} #${lastEvent.playerNumber}`
     : 'No events yet';
   const needsPlayer = !state.selectedPlayer;
 
@@ -568,6 +577,7 @@ function LivePageContent() {
             <ActionButton
               key={player}
               label={player}
+              subLabel={playerNames[player]}
               selected={state.selectedPlayer === player}
               onClick={() => dispatch({ type: 'SET_PLAYER', player })}
               className="!min-h-[44px] text-sm"
