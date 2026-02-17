@@ -92,7 +92,7 @@ export default function LoginPage() {
       </div>
       <section className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-          Supabase Auth
+          Account
         </div>
         <div className="mt-3 flex flex-col gap-3">
           <label className="text-sm font-semibold text-slate-700">
