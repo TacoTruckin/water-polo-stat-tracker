@@ -122,6 +122,23 @@ export default function LoginPage() {
           </div>
         </div>
       </section>
+
+      <section className="w-full max-w-lg rounded-2xl border border-blue-100 bg-blue-50 p-4">
+        <h2 className="text-base font-semibold text-blue-900">New Here? Getting Started</h2>
+        <ol className="mt-2 list-inside list-decimal space-y-2 text-sm text-blue-800">
+          <li>Enter your email and a password above, then tap <strong>Create Account</strong>.</li>
+          <li>The team admin will be notified and will activate your account.</li>
+          <li>Once approved, come back and <strong>Sign In</strong> with the same email and password.</li>
+          <li>On the home screen, look for a <strong>Test</strong> game to practice before game day.</li>
+        </ol>
+        <p className="mt-2 text-sm text-blue-800">
+          You only need to create your account once. For a full walkthrough, visit the{' '}
+          <a href="/guide" className="font-semibold underline">
+            Parent Tracker Guide
+          </a>
+          .
+        </p>
+      </section>
     </div>
   );
 }

@@ -48,15 +48,14 @@ export default function GuidePage() {
               and enter your email and a password. Click <strong>Sign Up</strong>.
             </p>
             <p className="mt-2">
-              The coach will be notified of your signup and will approve your account. You only need
-              to do this once.
+              The team admin will be notified of your signup and will approve your account. You only
+              need to do this once.
             </p>
           </StepCard>
 
           <StepCard step={2} title="Wait for Approval">
             <p>
-              After signing up, the coach needs to activate your account. You&apos;ll be able to log
-              in once approved. This usually happens within a few hours.
+              You&apos;ll be able to log in once the admin activates your account.
             </p>
           </StepCard>
 
@@ -85,7 +84,7 @@ export default function GuidePage() {
               <strong>&quot;Practice&quot;</strong>. Tap <strong>Join Session</strong> to enter.
             </p>
             <p className="mt-2">
-              If you don&apos;t see a test game, ask the coach to create one.
+              If you don&apos;t see a test game, ask the admin to create one.
             </p>
           </StepCard>
 
@@ -162,7 +161,7 @@ export default function GuidePage() {
             </ul>
             <p className="mt-2">
               If multiple parents are tracking, coordinate who covers offense vs defense. This
-              reduces duplicate entries.
+              reduces duplicate entries and allows everyone to enjoy the game more!
             </p>
           </StepCard>
 
@@ -178,7 +177,7 @@ export default function GuidePage() {
                 For special situations (man-up, man-down, 5-meter), tap the situation BEFORE logging
                 the action
               </li>
-              <li>The situation auto-resets after a goal or turnover</li>
+              <li>The situation resets automatically after 30 seconds or when an action is logged</li>
             </ol>
           </StepCard>
 
@@ -289,7 +288,7 @@ export default function GuidePage() {
         <h2 className="text-lg font-semibold text-blue-900">Need Help?</h2>
         <p className="mt-1 text-sm text-blue-800">
           If something isn&apos;t working or you&apos;re unsure about an action, just skip it and
-          keep tracking what you can. The coach can review and clean up the data after the game.
+          keep tracking what you can. The admin can review and clean up the data after the game.
           Don&apos;t stress about getting everything perfect — every logged event helps!
         </p>
       </section>

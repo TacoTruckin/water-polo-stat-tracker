@@ -319,47 +319,86 @@ export default function HomePage() {
       ) : games.length === 0 ? (
         <p className="text-slate-600">No upcoming games yet.</p>
       ) : (
-        <div className="grid gap-3">
-          {games.map((game) => {
-            const existingSession = sessions.find((session) => session.game_id === game.id);
-            const trackingLocked =
-              profile?.role !== 'super_admin' && !canTrackToday(game.scheduled_at);
-            return (
-              <div
-                key={game.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4"
-              >
-                <div>
-                  <div className="text-base font-semibold text-slate-900">
-                    vs {game.opponent_name}
-                  </div>
-                  <div className="text-sm text-slate-600">{formatGameTime(game.scheduled_at)}</div>
-                  {game.location ? (
-                    <div className="text-xs text-slate-500">{game.location}</div>
-                  ) : null}
-                  {existingSession ? (
-                    <div className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                      Session ready
-                    </div>
-                  ) : null}
-                  {trackingLocked ? (
-                    <div className="mt-2 text-xs font-semibold text-amber-600">
-                      Tracking opens on game day.
-                    </div>
-                  ) : null}
-                </div>
-                <button
-                  type="button"
-                  className="min-h-[56px] rounded-xl bg-slate-900 px-4 text-base font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                  onClick={() => handleStartTracking(game)}
-                  disabled={startingGameId === game.id || trackingLocked}
+        <>
+          {(() => {
+            const isTestGame = (g: Game) =>
+              /test|practice/i.test(g.opponent_name);
+            const realGames = games.filter((g) => !isTestGame(g));
+            const testGames = games.filter((g) => isTestGame(g));
+
+            const renderGameCard = (game: Game) => {
+              const existingSession = sessions.find((session) => session.game_id === game.id);
+              const trackingLocked =
+                profile?.role !== 'super_admin' && !canTrackToday(game.scheduled_at);
+              const isTest = isTestGame(game);
+              return (
+                <div
+                  key={game.id}
+                  className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4 ${
+                    isTest
+                      ? 'border-dashed border-slate-300 bg-slate-50'
+                      : 'border-slate-200 bg-white'
+                  }`}
                 >
-                  {existingSession ? 'Resume' : 'Start Live'}
-                </button>
-              </div>
+                  <div>
+                    <div className="text-base font-semibold text-slate-900">
+                      vs {game.opponent_name}
+                    </div>
+                    <div className="text-sm text-slate-600">{formatGameTime(game.scheduled_at)}</div>
+                    {game.location ? (
+                      <div className="text-xs text-slate-500">{game.location}</div>
+                    ) : null}
+                    {existingSession ? (
+                      <div className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                        Session ready
+                      </div>
+                    ) : null}
+                    {trackingLocked ? (
+                      <div className="mt-2 text-xs font-semibold text-amber-600">
+                        Tracking opens on game day.
+                      </div>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    className="min-h-[56px] rounded-xl bg-slate-900 px-4 text-base font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    onClick={() => handleStartTracking(game)}
+                    disabled={startingGameId === game.id || trackingLocked}
+                  >
+                    {existingSession ? 'Resume' : 'Start Live'}
+                  </button>
+                </div>
+              );
+            };
+
+            return (
+              <>
+                {realGames.length > 0 ? (
+                  <div className="grid gap-3">
+                    {realGames.map(renderGameCard)}
+                  </div>
+                ) : testGames.length > 0 ? (
+                  <p className="text-slate-600">No real games scheduled yet.</p>
+                ) : null}
+
+                {testGames.length > 0 ? (
+                  <>
+                    <div className="flex items-center gap-3">
+                      <div className="h-px flex-1 bg-slate-200" />
+                      <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                        Practice
+                      </span>
+                      <div className="h-px flex-1 bg-slate-200" />
+                    </div>
+                    <div className="grid gap-3">
+                      {testGames.map(renderGameCard)}
+                    </div>
+                  </>
+                ) : null}
+              </>
             );
-          })}
-        </div>
+          })()}
+        </>
       )}
     </div>
   );
