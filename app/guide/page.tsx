@@ -166,12 +166,13 @@ export default function GuidePage() {
           </StepCard>
 
           <StepCard step={9} title="Track the Game">
-            <p>When the first whistle blows:</p>
+            <p>At the start of the game:</p>
             <ol className="mt-2 list-inside list-decimal space-y-1">
               <li>
-                <strong>One person</strong> taps the green pulsing <strong>&quot;Game Started&quot;</strong> button
-                at the top of the screen. Only one person needs to do this &mdash; first tap wins. This
-                syncs the video timing for the whole game.
+                When the referee blows the whistle to start the game, <strong>one person</strong> taps
+                the green pulsing <strong>&quot;Game Started&quot;</strong> button at the top of the screen.
+                Only one person needs to do this &mdash; first tap wins. This syncs the video timing
+                for the whole game.
               </li>
               <li>Make sure the correct <strong>quarter</strong> is selected</li>
               <li>Watch the play</li>
