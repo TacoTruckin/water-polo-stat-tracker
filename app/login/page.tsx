@@ -15,6 +15,7 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [showReset, setShowReset] = useState(false);
 
   useEffect(() => {
     if (!loading && user) {
@@ -30,6 +31,20 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       setError(error.message);
+    }
+    setBusy(false);
+  };
+
+  const handleResetPassword = async () => {
+    if (!supabase || !email) return;
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    if (error) {
+      setError(error.message);
+    } else {
+      setMessage('Password reset email sent. Check your inbox.');
     }
     setBusy(false);
   };
@@ -120,6 +135,29 @@ export default function LoginPage() {
               Create Account
             </button>
           </div>
+          {showReset ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-sm text-slate-600">
+                Enter your email above and tap the button below. We&apos;ll send a reset link.
+              </p>
+              <button
+                type="button"
+                className="mt-2 min-h-[44px] w-full rounded-lg bg-slate-700 text-sm font-semibold text-white disabled:opacity-50"
+                onClick={handleResetPassword}
+                disabled={!email || busy}
+              >
+                Send Reset Link
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="self-start text-sm font-semibold text-slate-500 underline"
+              onClick={() => setShowReset(true)}
+            >
+              Forgot password?
+            </button>
+          )}
         </div>
       </section>
 
