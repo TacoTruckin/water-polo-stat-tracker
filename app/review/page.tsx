@@ -48,7 +48,7 @@ type EventRow = {
   version?: number | null;
   occurred_at: string;
   created_by: string | null;
-  payload?: { shot?: { zone: string; outcome: string } } | null;
+  payload?: { shot?: { zone: string; outcome: string }; cap_number?: string } | null;
   video_segments?: {
     id: string;
     segment_index: number;
@@ -68,6 +68,18 @@ type PresenceRow = {
     email: string | null;
   } | null;
 };
+
+/** Display player label — handles both old (cap number) and new (name) player_id formats */
+function playerLabel(event: EventRow): string {
+  const pid = event.player_id;
+  const cap = event.payload?.cap_number;
+  // New format: player_id is a name, cap_number in payload
+  if (cap) return `#${cap} ${pid}`;
+  // Old format: player_id is a cap number (purely digits)
+  if (/^\d+$/.test(pid)) return `#${pid}`;
+  // Name without cap number
+  return pid;
+}
 
 function ReviewPageContent() {
   const { user, loading: authLoading, supabaseReady } = useRequireAuth('/login');
@@ -498,7 +510,7 @@ function ReviewPageContent() {
       const descriptionParts = [
         `Q${event.quarter}`,
         clockDisplay,
-        `#${event.player_id}`,
+        playerLabel(event),
         event.event_type,
         shotLabel,
         event.context || ''
@@ -507,7 +519,7 @@ function ReviewPageContent() {
         descriptionParts.push('NO VIDEO AVAILABLE');
       }
       return {
-        marker_name: `${event.event_type} #${event.player_id}`,
+        marker_name: `${event.event_type} ${playerLabel(event)}`,
         description: descriptionParts.join(' • '),
         segment_index: segment?.segment_index ?? '',
         segment_label: segment?.label ?? '',
@@ -564,11 +576,11 @@ function ReviewPageContent() {
           ? ` ${event.payload.shot.zone} ${event.payload.shot.outcome}`
           : '';
         return {
-          name: `${event.event_type} #${event.player_id}${shotLabel}`,
+          name: `${event.event_type} ${playerLabel(event)}${shotLabel}`,
           in_timecode: formatTimecode(inSec, safeFps),
           out_timecode: formatTimecode(outSec, safeFps),
           duration_seconds: preRoll + postRoll,
-          description: `${periodLabel} • #${event.player_id} • ${event.event_type}${shotLabel} • ${event.context || 'EVEN'}`,
+          description: `${periodLabel} • ${playerLabel(event)} • ${event.event_type}${shotLabel} • ${event.context || 'EVEN'}`,
           color: getMarkerColor(event.event_type),
           event_type: event.event_type,
           player: event.player_id,
@@ -856,9 +868,10 @@ function ReviewPageContent() {
         id: event.id,
         game_id: event.game_id,
         session_id: event.session_id,
-        player_id: playerIdByNumber.get(event.player_id) ?? null,
-        player_number: event.player_id,
-        external_player_id: externalPlayerByNumber.get(event.player_id) ?? null,
+        player_id: playerIdByNumber.get(event.payload?.cap_number ?? event.player_id) ?? null,
+        player_name: event.player_id,
+        player_number: event.payload?.cap_number ?? (/^\d+$/.test(event.player_id) ? event.player_id : null),
+        external_player_id: externalPlayerByNumber.get(event.payload?.cap_number ?? event.player_id) ?? null,
         event_type: event.event_type,
         quarter: event.quarter,
         context: event.context,
@@ -1242,7 +1255,7 @@ function ReviewPageContent() {
                       ) : null}
                     </div>
                     <div>{event.team}</div>
-                    <div>#{event.player_id}</div>
+                    <div>{playerLabel(event)}</div>
                     <div className="text-xs font-semibold text-slate-600">{contextValue}</div>
                     <div className="text-xs font-semibold text-slate-600">
                       {trackerLabel(event.created_by, profile?.role === 'super_admin')}

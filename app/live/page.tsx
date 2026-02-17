@@ -222,7 +222,7 @@ function LivePageContent() {
         created_by: user.id,
         event_type: event.eventType,
         team: event.team,
-        player_id: event.playerNumber,
+        player_id: playerNames[event.playerNumber] || event.playerNumber,
         quarter: event.quarter,
         context: event.context,
         clock_ms: event.gameClockMs,
@@ -233,7 +233,8 @@ function LivePageContent() {
         event_video_seconds: event.eventVideoSeconds ?? null,
         payload: {
           shot: event.shot ?? null,
-          notes: event.notes ?? null
+          notes: event.notes ?? null,
+          cap_number: event.playerNumber
         }
       });
     },
@@ -949,6 +950,29 @@ function LivePageContent() {
             </button>
           </div>
         </section>
+      ) : null}
+
+      {profile?.role === 'super_admin' ? (
+        <details className="rounded-2xl border border-slate-200 bg-white p-4">
+          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+            Edit Cap Numbers
+          </summary>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {playerOptions.map((cap) => (
+              <label key={cap} className="text-xs text-slate-600">
+                <span className="font-semibold">#{cap}</span>
+                <input
+                  className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1 text-sm"
+                  value={playerNames[cap] ?? ''}
+                  onChange={(e) =>
+                    dispatch({ type: 'SET_ROSTER_NAMES', names: { [cap]: e.target.value } })
+                  }
+                  placeholder="Name"
+                />
+              </label>
+            ))}
+          </div>
+        </details>
       ) : null}
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4">

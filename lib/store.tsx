@@ -46,6 +46,7 @@ export type GameAction =
   | { type: 'DELETE_EVENT'; id: string }
   | { type: 'LOAD_GAME'; state: GameState }
   | { type: 'RESET_GAME' }
+  | { type: 'SET_ROSTER_NAMES'; names: Record<string, string> }
   | { type: 'CLOCK_START'; now: number }
   | { type: 'CLOCK_PAUSE'; now: number }
   | { type: 'CLOCK_RESUME'; now: number }
@@ -220,6 +221,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return mergeStateWithDefaults(action.state);
     case 'RESET_GAME':
       return createInitialState();
+    case 'SET_ROSTER_NAMES':
+      return {
+        ...state,
+        roster: { ...state.roster, names: { ...state.roster.names, ...action.names } }
+      };
     case 'CLOCK_START':
       return {
         ...state,
