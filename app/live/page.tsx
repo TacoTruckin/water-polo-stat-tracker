@@ -19,6 +19,7 @@ const quarterOptions: { value: Quarter; label: string }[] = [
 ];
 
 const contextOptions: { value: Context; label: string }[] = [
+  { value: 'EVEN', label: 'Even' },
   { value: 'MAN_UP', label: 'Man-Up' },
   { value: 'MAN_DOWN', label: 'Man-Down' },
   { value: 'FIVE_M', label: '5M' }
@@ -211,11 +212,13 @@ function LivePageContent() {
     [getCurrentClockMs, quarterLengthSeconds, state.quarter]
   );
 
+  const [syncErrors, setSyncErrors] = useState(0);
+
   const logEventToDb = useCallback(
     async (event: GameEvent) => {
       const gameId = sessionInfo?.gameId ?? state.gameId;
       if (!supabase || !state.sessionId || !user || !gameId) return;
-      await supabase.from('events').insert({
+      const { error } = await supabase.from('events').insert({
         id: event.id,
         session_id: state.sessionId,
         game_id: gameId,
@@ -237,8 +240,13 @@ function LivePageContent() {
           cap_number: event.playerNumber
         }
       });
+      if (error) {
+        setSyncErrors((prev) => prev + 1);
+      } else {
+        setSyncErrors(0);
+      }
     },
-    [sessionInfo?.gameId, state.gameId, state.sessionId, user]
+    [sessionInfo?.gameId, state.gameId, state.sessionId, user, playerNames]
   );
 
   const showToast = useCallback((message: string) => {
@@ -833,6 +841,11 @@ function LivePageContent() {
         {isEnded ? (
           <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
             Game closed. Tracking is locked.
+          </div>
+        ) : null}
+        {syncErrors > 0 ? (
+          <div className="mt-3 rounded-lg border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-700">
+            Sync issue — {syncErrors} event{syncErrors > 1 ? 's' : ''} failed to save. Check your connection.
           </div>
         ) : null}
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">

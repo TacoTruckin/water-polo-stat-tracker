@@ -191,8 +191,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case 'SET_EVENTS':
       return {
         ...state,
-        events: action.events,
-        undoStack: []
+        events: action.events
       };
     case 'ADD_EVENT':
       return withUndo(state, [...state.events, action.event]);
