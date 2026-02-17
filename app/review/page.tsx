@@ -101,6 +101,8 @@ function ReviewPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [exportAllStatuses, setExportAllStatuses] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [remapping, setRemapping] = useState(false);
+  const [remapResult, setRemapResult] = useState<string | null>(null);
 
   const canUseSupabase = supabase !== null && supabaseReady;
   const isAdmin = profile?.role === 'super_admin';
@@ -535,6 +537,112 @@ function ReviewPageContent() {
     URL.revokeObjectURL(url);
   };
 
+  const getMarkerColor = (eventType: string): string => {
+    if (eventType === 'SHOT_GOAL') return 'Green';
+    if (eventType.startsWith('SHOT_')) return 'Yellow';
+    if (eventType === 'ASSIST') return 'Cyan';
+    if (eventType.startsWith('TO_')) return 'Orange';
+    if (eventType === 'STEAL' || eventType === 'BLOCK' || eventType === 'TIP') return 'Blue';
+    if (eventType.includes('EXCLUSION')) return 'Red';
+    return 'White';
+  };
+
+  const handleExportPremiereMarkers = () => {
+    if (!isAdmin || events.length === 0) return;
+    const fpsValue = Number.parseFloat(fps);
+    const safeFps = Number.isNaN(fpsValue) ? 30 : fpsValue;
+    const preRoll = 7;
+    const postRoll = 3;
+    const mapped = events
+      .filter((event) => event.event_video_seconds !== null && !duplicateEventIds.has(event.id))
+      .map((event) => {
+        const videoSec = event.event_video_seconds ?? 0;
+        const inSec = Math.max(0, videoSec - preRoll);
+        const outSec = videoSec + postRoll;
+        const periodLabel = event.quarter === 5 ? 'OT' : `Q${event.quarter}`;
+        const shotLabel = event.payload?.shot
+          ? ` ${event.payload.shot.zone} ${event.payload.shot.outcome}`
+          : '';
+        return {
+          name: `${event.event_type} #${event.player_id}${shotLabel}`,
+          in_timecode: formatTimecode(inSec, safeFps),
+          out_timecode: formatTimecode(outSec, safeFps),
+          duration_seconds: preRoll + postRoll,
+          description: `${periodLabel} • #${event.player_id} • ${event.event_type}${shotLabel} • ${event.context || 'EVEN'}`,
+          color: getMarkerColor(event.event_type),
+          event_type: event.event_type,
+          player: event.player_id,
+          quarter: periodLabel,
+          context: event.context || 'EVEN',
+          in_seconds: inSec.toFixed(2),
+          out_seconds: outSec.toFixed(2)
+        };
+      });
+    if (mapped.length === 0) return;
+    const header = [
+      'name',
+      'in_timecode',
+      'out_timecode',
+      'duration_seconds',
+      'description',
+      'color',
+      'event_type',
+      'player',
+      'quarter',
+      'context',
+      'in_seconds',
+      'out_seconds'
+    ];
+    const csv = [
+      header.join(','),
+      ...mapped.map((row) =>
+        header.map((key) => escapeCsv((row as any)[key])).join(',')
+      )
+    ].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'premiere-markers.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleRemapSegments = async () => {
+    const targetGameId = gameIdParam ?? sessionInfo?.gameId;
+    if (!isAdmin || !supabase || !targetGameId) return;
+    setRemapping(true);
+    setRemapResult(null);
+    const { data, error } = await supabase.rpc('backfill_event_segments', {
+      target_game_id: targetGameId
+    });
+    if (error) {
+      setRemapResult(`Error: ${error.message}`);
+    } else {
+      setRemapResult(`Remapped ${data ?? 0} events to video segments.`);
+      // Reload events to pick up new segment mappings
+      const selectFields =
+        'id, event_type, team, player_id, quarter, context, clock_ms, clock_display, event_elapsed_game_seconds, segment_id, event_video_seconds, status, audited_by, audited_at, audit_notes, updated_at, version, occurred_at, payload, created_by, video_segments(id, segment_index, label, source_url, source_type, segment_start_game_seconds)';
+      let query = supabase.from('events').select(selectFields);
+      if (gameIdParam) {
+        query = query.eq('game_id', gameIdParam);
+      } else if (sessionId) {
+        query = query.eq('session_id', sessionId);
+      }
+      const { data: refreshed } = await query.order('occurred_at', { ascending: false });
+      if (refreshed) {
+        const normalized = (refreshed as unknown as EventRow[]).map((row) => {
+          if (row.video_segments && Array.isArray(row.video_segments)) {
+            return { ...row, video_segments: (row.video_segments as any)[0] ?? null };
+          }
+          return row;
+        }) as EventRow[];
+        setEvents(normalized);
+      }
+    }
+    setRemapping(false);
+  };
+
   const handleApplyDedupe = async () => {
     if (!isAdmin || !supabase || duplicateEventIds.size === 0) return;
     if (!user) return;
@@ -934,7 +1042,7 @@ function ReviewPageContent() {
                   onChange={(event) => setPreRollSeconds(Number(event.target.value))}
                 />
               </label>
-              <div className="flex items-end">
+              <div className="flex flex-col items-end gap-2">
                 <button
                   type="button"
                   className="min-h-[44px] w-full rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
@@ -942,6 +1050,14 @@ function ReviewPageContent() {
                   disabled={events.length === 0}
                 >
                   Export Markers
+                </button>
+                <button
+                  type="button"
+                  className="min-h-[44px] w-full rounded-lg border border-purple-300 bg-purple-50 px-4 text-sm font-semibold text-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={handleExportPremiereMarkers}
+                  disabled={events.length === 0}
+                >
+                  Premiere Pro CSV
                 </button>
               </div>
             </div>
@@ -980,6 +1096,31 @@ function ReviewPageContent() {
             </div>
           </section>
         </div>
+      ) : null}
+      {isAdmin ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+            Video Segments
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-slate-600">
+            <button
+              type="button"
+              className="min-h-[36px] rounded-lg border border-blue-300 bg-blue-50 px-3 text-xs font-semibold text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={handleRemapSegments}
+              disabled={remapping || events.length === 0}
+            >
+              {remapping ? 'Remapping…' : 'Remap Events to Segments'}
+            </button>
+            <span className="text-xs text-slate-500">
+              Re-links all events to video segments. Use after adding or adjusting segments.
+            </span>
+            {remapResult ? (
+              <span className={`text-xs font-semibold ${remapResult.startsWith('Error') ? 'text-red-600' : 'text-emerald-600'}`}>
+                {remapResult}
+              </span>
+            ) : null}
+          </div>
+        </section>
       ) : null}
       {isAggregateView && isAdmin ? (
         <section className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -1065,9 +1206,11 @@ function ReviewPageContent() {
                 const isDuplicate = duplicateEventIds.has(event.id);
                 const segment = event.video_segments ?? null;
                 const videoSeconds = event.event_video_seconds ?? null;
+                const videoSecondsWithPreRoll =
+                  videoSeconds !== null ? Math.max(0, videoSeconds - preRollSeconds) : null;
                 const videoUrl =
-                  isAdmin && segment?.source_url && videoSeconds !== null
-                    ? `${segment.source_url}${segment.source_url.includes('?') ? '&' : '?'}t=${videoSeconds}s`
+                  isAdmin && segment?.source_url && videoSecondsWithPreRoll !== null
+                    ? `${segment.source_url}${segment.source_url.includes('?') ? '&' : '?'}t=${videoSecondsWithPreRoll}s`
                     : null;
                 return (
                   <div

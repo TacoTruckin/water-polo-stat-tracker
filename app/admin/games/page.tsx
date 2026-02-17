@@ -11,6 +11,7 @@ type GameRow = {
   opponent_name: string;
   scheduled_at: string;
   location: string | null;
+  quarter_length_seconds: number;
   created_at: string;
 };
 
@@ -18,12 +19,14 @@ type GameDraft = {
   opponent: string;
   scheduledAt: string;
   location: string;
+  quarterMinutes: string;
 };
 
 const emptyDraft: GameDraft = {
   opponent: '',
   scheduledAt: '',
-  location: ''
+  location: '',
+  quarterMinutes: '7'
 };
 
 function toDatetimeLocal(value: string | null) {
@@ -56,7 +59,7 @@ export default function AdminGamesPage() {
     setError(null);
     const { data, error } = await supabase
       .from('games')
-      .select('id, opponent_name, scheduled_at, location, created_at')
+      .select('id, opponent_name, scheduled_at, location, quarter_length_seconds, created_at')
       .order('scheduled_at', { ascending: true });
 
     if (error) {
@@ -89,10 +92,12 @@ export default function AdminGamesPage() {
   const handleCreate = async () => {
     if (!supabase || !user) return;
     setError(null);
+    const quarterMin = Number.parseFloat(draft.quarterMinutes) || 7;
     const payload = {
       opponent_name: draft.opponent.trim(),
       scheduled_at: new Date(draft.scheduledAt).toISOString(),
       location: draft.location.trim() || null,
+      quarter_length_seconds: Math.round(quarterMin * 60),
       created_by: user.id
     };
     const { error } = await supabase.from('games').insert(payload);
@@ -109,17 +114,20 @@ export default function AdminGamesPage() {
     setEditDraft({
       opponent: game.opponent_name,
       scheduledAt: toDatetimeLocal(game.scheduled_at),
-      location: game.location ?? ''
+      location: game.location ?? '',
+      quarterMinutes: String(Math.round((game.quarter_length_seconds ?? 480) / 60))
     });
   };
 
   const handleEditSave = async () => {
     if (!supabase || !editingId) return;
     setError(null);
+    const quarterMin = Number.parseFloat(editDraft.quarterMinutes) || 7;
     const payload = {
       opponent_name: editDraft.opponent.trim(),
       scheduled_at: new Date(editDraft.scheduledAt).toISOString(),
-      location: editDraft.location.trim() || null
+      location: editDraft.location.trim() || null,
+      quarter_length_seconds: Math.round(quarterMin * 60)
     };
     const { error } = await supabase.from('games').update(payload).eq('id', editingId);
     if (error) {
@@ -223,6 +231,21 @@ export default function AdminGamesPage() {
               placeholder="Optional"
             />
           </label>
+          <label className="text-sm font-semibold text-slate-700">
+            Quarter Length (min)
+            <select
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+              value={draft.quarterMinutes}
+              onChange={(event) =>
+                setDraft((prev) => ({ ...prev, quarterMinutes: event.target.value }))
+              }
+            >
+              <option value="5">5 min</option>
+              <option value="6">6 min</option>
+              <option value="7">7 min</option>
+              <option value="8">8 min</option>
+            </select>
+          </label>
         </div>
         <div className="mt-4">
           <button
@@ -277,6 +300,21 @@ export default function AdminGamesPage() {
                       }
                     />
                   </label>
+                  <label className="text-sm font-semibold text-slate-700">
+                    Quarter Length (min)
+                    <select
+                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+                      value={editDraft.quarterMinutes}
+                      onChange={(event) =>
+                        setEditDraft((prev) => ({ ...prev, quarterMinutes: event.target.value }))
+                      }
+                    >
+                      <option value="5">5 min</option>
+                      <option value="6">6 min</option>
+                      <option value="7">7 min</option>
+                      <option value="8">8 min</option>
+                    </select>
+                  </label>
                   <div className="md:col-span-3 flex gap-2">
                     <button
                       type="button"
@@ -307,6 +345,9 @@ export default function AdminGamesPage() {
                     {game.location ? (
                       <div className="text-xs text-slate-500">{game.location}</div>
                     ) : null}
+                    <div className="text-xs text-slate-500">
+                      {Math.round((game.quarter_length_seconds ?? 480) / 60)}-min quarters
+                    </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <button

@@ -37,6 +37,9 @@ export default function RootLayout({ children }: RootLayoutProps) {
                   <Link className="hover:text-slate-900" href="/review">
                     Review
                   </Link>
+                  <Link className="hover:text-slate-900" href="/guide">
+                    Guide
+                  </Link>
                 </nav>
               </div>
             </header>

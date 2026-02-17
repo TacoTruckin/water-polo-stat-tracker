@@ -47,6 +47,7 @@ type VideoSegment = {
   source_type: 'youtube' | 'file' | 'unknown' | null;
   source_url: string | null;
   notes: string | null;
+  video_offset_seconds: number;
 };
 
 function ActionButton({
@@ -111,6 +112,7 @@ function LivePageContent() {
     status: 'not_started' | 'running' | 'paused' | 'ended' | null;
     scheduledAt: string | null;
     quarterLengthSeconds: number | null;
+    gameStartedAt: string | null;
   } | null>(null);
   const [turnoverPickerOpen, setTurnoverPickerOpen] = useState(false);
   const [shotModalOpen, setShotModalOpen] = useState(false);
@@ -126,6 +128,7 @@ function LivePageContent() {
   );
   const [segmentSourceUrl, setSegmentSourceUrl] = useState('');
   const [segmentNotes, setSegmentNotes] = useState('');
+  const [segmentVideoOffset, setSegmentVideoOffset] = useState(5);
   const [segmentBusy, setSegmentBusy] = useState(false);
   const eventsRef = useRef(state.events);
 
@@ -387,6 +390,20 @@ function LivePageContent() {
     setUndoUsed(true);
   };
 
+  const handleMarkGameStarted = async () => {
+    if (!supabase || !sessionInfo?.gameId || !user) return;
+    if (sessionInfo.gameStartedAt) return; // already started
+    const { data, error } = await supabase.rpc('mark_game_started', {
+      target_game_id: sessionInfo.gameId
+    });
+    if (!error && data) {
+      setSessionInfo((prev) =>
+        prev ? { ...prev, gameStartedAt: data as string } : prev
+      );
+      showToast('Game started!');
+    }
+  };
+
   const handleEndGame = async () => {
     if (!state.sessionId || !supabase || !user) return;
     if (profile?.role !== 'super_admin') return;
@@ -435,10 +452,11 @@ function LivePageContent() {
         source_type: segmentSourceType,
         source_url: segmentSourceUrl.trim() || null,
         notes: segmentNotes.trim() || null,
+        video_offset_seconds: segmentVideoOffset,
         created_by: user.id
       })
       .select(
-        'id, segment_index, segment_start_game_seconds, segment_end_game_seconds, label, source_type, source_url, notes'
+        'id, segment_index, segment_start_game_seconds, segment_end_game_seconds, label, source_type, source_url, notes, video_offset_seconds'
       )
       .single();
     if (!error && data) {
@@ -551,7 +569,7 @@ function LivePageContent() {
       const { data } = await supabaseClient
         .from('sessions')
         .select(
-          'id, game_id, role_scope, status, started_at, created_at, quarter_length_seconds, games(opponent_name, scheduled_at)'
+          'id, game_id, role_scope, status, started_at, created_at, quarter_length_seconds, games(opponent_name, scheduled_at, game_started_at, quarter_length_seconds)'
         )
         .eq('id', state.sessionId)
         .maybeSingle();
@@ -566,7 +584,8 @@ function LivePageContent() {
       const startedAt = data.started_at ?? data.created_at ?? null;
       const gameId = data.game_id ?? null;
       const roleScope = (data.role_scope as SessionScope) ?? null;
-      const quarterLengthSeconds = data.quarter_length_seconds ?? null;
+      const quarterLengthSeconds = (gameRecord as any)?.quarter_length_seconds ?? data.quarter_length_seconds ?? null;
+      const gameStartedAt = (gameRecord as any)?.game_started_at ?? null;
       setSessionInfo({
         opponent,
         startedAt,
@@ -574,7 +593,8 @@ function LivePageContent() {
         roleScope,
         status: (data.status as 'not_started' | 'running' | 'paused' | 'ended' | null) ?? null,
         scheduledAt,
-        quarterLengthSeconds
+        quarterLengthSeconds,
+        gameStartedAt
       });
       const nextCreatedAt = startedAt ? Date.parse(startedAt) : Date.now();
       dispatch({
@@ -595,7 +615,7 @@ function LivePageContent() {
     const { data } = await supabase
       .from('video_segments')
       .select(
-        'id, segment_index, segment_start_game_seconds, segment_end_game_seconds, label, source_type, source_url, notes'
+        'id, segment_index, segment_start_game_seconds, segment_end_game_seconds, label, source_type, source_url, notes, video_offset_seconds'
       )
       .eq('game_id', sessionInfo.gameId)
       .order('segment_index', { ascending: true });
@@ -771,6 +791,19 @@ function LivePageContent() {
             ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {!sessionInfo?.gameStartedAt && !isEnded ? (
+              <button
+                type="button"
+                className="min-h-[44px] animate-pulse rounded-lg border border-emerald-400 bg-emerald-500 px-4 text-sm font-bold text-white shadow-md"
+                onClick={handleMarkGameStarted}
+              >
+                Game Started
+              </button>
+            ) : sessionInfo?.gameStartedAt ? (
+              <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                Game live
+              </span>
+            ) : null}
             {profile?.role === 'super_admin' ? (
               <button
                 type="button"
@@ -874,7 +907,7 @@ function LivePageContent() {
                 placeholder="https://youtu.be/..."
               />
             </label>
-            <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400 md:col-span-2">
+            <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
               Notes
               <input
                 className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
@@ -882,6 +915,19 @@ function LivePageContent() {
                 onChange={(event) => setSegmentNotes(event.target.value)}
                 placeholder="Optional notes"
               />
+            </label>
+            <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+              Pre-whistle (sec)
+              <input
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                type="number"
+                min={0}
+                value={segmentVideoOffset}
+                onChange={(event) => setSegmentVideoOffset(Math.max(0, Number(event.target.value)))}
+              />
+              <span className="mt-0.5 block text-[10px] font-normal normal-case tracking-normal text-slate-500">
+                Seconds of video before the game start whistle
+              </span>
             </label>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
