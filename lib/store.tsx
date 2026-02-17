@@ -52,7 +52,7 @@ export type GameAction =
   | { type: 'CLOCK_RESUME'; now: number }
   | { type: 'CLOCK_RESET' };
 
-export const STORAGE_KEY = 'water-polo-stat-tracker:v1';
+export const STORAGE_KEY = 'water-polo-stat-tracker:v2';
 
 const seedRoster = [
   '1',
